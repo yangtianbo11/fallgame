@@ -1,0 +1,1444 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+  <title>字母掉落小游戏（全端适配）</title>
+  <style>
+    :root{
+      --bg:#0b1020;
+      --panel:#0f1733cc;
+      --text:#eaf1ff;
+      --muted:#a9b7dd;
+      --accent:#7aa7ff;
+      --danger:#ff7a9c;
+      --ok:#7dffb2;
+      --warn:#ffd37a;
+      --safe-top:max(12px, env(safe-area-inset-top));
+      --safe-right:max(12px, env(safe-area-inset-right));
+      --safe-bottom:max(12px, env(safe-area-inset-bottom));
+      --safe-left:max(12px, env(safe-area-inset-left));
+    }
+    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+    html,body{height:100%;margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,"PingFang SC","Noto Sans SC",Arial}
+    body{
+      background:
+        radial-gradient(1200px 600px at 20% 10%, #1c2b61 0%, transparent 55%),
+        radial-gradient(900px 500px at 80% 20%, #2c155e 0%, transparent 55%),
+        var(--bg);
+      color:var(--text);
+      overflow:hidden;
+      user-select:none;
+      touch-action:manipulation;
+    }
+    #game{position:relative;width:100%;height:100dvh;min-height:100vh;overflow:hidden;outline:none}
+    #flash{position:absolute;inset:0;background:rgba(255,122,156,.10);opacity:0;pointer-events:none;z-index:5}
+    #flash.bad{animation:flash 220ms ease-out}
+    @keyframes flash{0%{opacity:0}35%{opacity:1}100%{opacity:0}}
+
+    #leaderboard{
+      position:absolute;left:var(--safe-left);top:calc(var(--safe-top) + 92px);z-index:8;
+      width:min(260px,42vw);padding:10px 12px;border-radius:14px;
+      background:var(--panel);border:1px solid #2a3a75;backdrop-filter:blur(8px);
+      box-shadow:0 10px 30px rgba(0,0,0,.25)
+    }
+    #leaderboardTitle{font-size:14px;font-weight:900;margin-bottom:8px}
+    #leaderboardList{display:flex;flex-direction:column;gap:6px}
+    .lbItem{display:grid;grid-template-columns:26px 56px 1fr;gap:8px;align-items:start;padding:6px 8px;border-radius:10px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08)}
+    .lbItem.current{background:rgba(125,255,178,.10);border-color:rgba(125,255,178,.35);box-shadow:0 0 0 2px rgba(125,255,178,.10)}
+    .lbRank{font-weight:900;color:var(--warn)}
+    .lbScore{font-weight:900}
+    .lbTime{font-size:11px;color:var(--muted);line-height:1.3}
+
+    #hud{
+      position:absolute;left:var(--safe-left);top:var(--safe-top);z-index:20;
+      display:flex;flex-wrap:wrap;gap:8px;align-items:center;
+      padding:10px 12px;max-width:min(96vw,720px);border-radius:14px;
+      background:var(--panel);border:1px solid #2a3a75;backdrop-filter:blur(8px);
+      box-shadow:0 10px 30px rgba(0,0,0,.25)
+    }
+    .pill{display:flex;gap:8px;align-items:baseline;white-space:nowrap;padding:6px 10px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12)}
+    .pill .k{color:var(--muted);font-size:12px}
+    .pill .v{font-weight:900;letter-spacing:.4px}
+    .pill.good .v{color:var(--ok)}
+    .pill.bad .v{color:var(--danger)}
+    .pill.warn .v{color:var(--warn)}
+    #recDot{width:10px;height:10px;border-radius:999px;background:rgba(255,255,255,.25);box-shadow:0 0 0 2px rgba(255,255,255,.10)}
+    #recDot.on{background:var(--danger);box-shadow:0 0 0 3px rgba(255,122,156,.20),0 0 18px rgba(255,122,156,.45);animation:recPulse 1s ease-in-out infinite}
+    @keyframes recPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.15)}}
+
+    #controlBar{
+      position:absolute;right:var(--safe-right);top:var(--safe-top);z-index:20;
+      display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;align-items:center;
+      max-width:min(96vw,820px);padding:10px 12px;border-radius:14px;
+      background:var(--panel);border:1px solid rgba(255,255,255,.16);backdrop-filter:blur(10px);
+      box-shadow:0 10px 30px rgba(0,0,0,.25)
+    }
+    .btn{padding:10px 12px;min-height:42px;border-radius:12px;font-weight:800;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:var(--text);cursor:pointer}
+    .btn.primary{border-color:rgba(122,167,255,.55);background:rgba(122,167,255,.15)}
+    .btn.danger{border-color:rgba(255,122,156,.45);background:rgba(255,122,156,.12)}
+    .btn:disabled{opacity:.45;cursor:not-allowed}
+
+    #settings{
+      position:absolute;right:var(--safe-right);top:calc(var(--safe-top) + 64px);z-index:60;display:none;
+      width:min(92vw,340px);max-height:min(72dvh,520px);overflow:auto;
+      padding:12px;border-radius:14px;background:var(--panel);border:1px solid #2a3a75;
+      backdrop-filter:blur(10px);box-shadow:0 10px 30px rgba(0,0,0,.28)
+    }
+    #settings.show{display:block}
+    #dictationPanel{
+      position:absolute;right:var(--safe-right);top:calc(var(--safe-top) + 64px);z-index:25;display:none;
+      width:min(92vw,340px);padding:12px;border-radius:14px;background:var(--panel);border:1px solid #2a3a75;
+      backdrop-filter:blur(10px);box-shadow:0 10px 30px rgba(0,0,0,.28)
+    }
+    #dictationPanel.show{display:block}
+    #dictationTitle{font-size:14px;font-weight:900;margin-bottom:6px}
+    #dictationBody{font-size:12px;color:var(--muted);line-height:1.55;white-space:pre-wrap}
+    .row{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:10px 0}
+    label{font-size:12px;color:var(--muted)}
+    input[type="range"]{width:150px}
+    input[type="number"],select{width:96px;padding:7px 8px;border-radius:10px;border:1px solid rgba(255,255,255,.16);background:rgba(0,0,0,.18);color:var(--text)}
+    select{width:150px}
+    .small{font-size:12px;color:var(--muted);line-height:1.45}
+
+    .letter{
+      position:absolute;font-weight:900;letter-spacing:1px;text-shadow:0 10px 25px rgba(0,0,0,.45);
+      transform:translate(-50%,-50%);will-change:transform,top,opacity;z-index:30
+    }
+    .hit{animation:hitPop 260ms ease-out forwards;filter:drop-shadow(0 0 14px rgba(125,255,178,.55))}
+    @keyframes hitPop{from{transform:translate(-50%,-50%) scale(1)}to{transform:translate(-50%,-50%) scale(2);opacity:.95}}
+    .settled-clicked{transform:translate(-50%,-50%) scale(1.5);color:#ffd37a;z-index:32}
+
+    #ground{position:absolute;left:0;right:0;bottom:0;height:84px;background:linear-gradient(to top, rgba(0,0,0,.48), transparent);z-index:1;pointer-events:none}
+
+    #kbdWrap{
+      position:absolute;left:50%;bottom:calc(var(--safe-bottom) + 12px);transform:translateX(-50%);z-index:30;
+      width:min(96vw,560px);padding:10px 12px;border-radius:16px;background:rgba(15,23,51,.55);
+      border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(10px);box-shadow:0 10px 30px rgba(0,0,0,.22)
+    }
+    .kbdRow{display:flex;gap:6px;justify-content:center;margin:6px 0}
+    .key{width:clamp(28px,7.2vw,42px);height:clamp(32px,8vw,44px);border-radius:10px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:var(--text);font-weight:900;text-transform:uppercase;font-size:clamp(12px,3vw,16px)}
+    .key.active{border-color:rgba(122,167,255,.75);box-shadow:0 0 0 2px rgba(122,167,255,.18),0 10px 20px rgba(0,0,0,.25);background:rgba(122,167,255,.14)}
+    .key.newest{border-color:rgba(125,255,178,.85);background:rgba(125,255,178,.12);box-shadow:0 0 0 3px rgba(125,255,178,.18),0 10px 22px rgba(0,0,0,.28);animation:newestPulse 380ms ease-out}
+    .key.pressed{border-color:rgba(255,211,122,.9);background:rgba(255,211,122,.14)}
+    @keyframes newestPulse{0%{transform:scale(1)}45%{transform:scale(1.15)}100%{transform:scale(1)}}
+
+    #micStatus{
+      position:absolute;left:50%;bottom:calc(var(--safe-bottom) + 136px);transform:translateX(-50%);z-index:35;display:none;
+      padding:10px 18px;border-radius:14px;background:rgba(15,23,51,.72);border:1px solid rgba(255,255,255,.14);
+      backdrop-filter:blur(10px);text-align:center;font-size:13px;color:var(--muted);gap:8px;align-items:center
+    }
+    #micStatus.show{display:flex}
+    #micDot{width:12px;height:12px;border-radius:999px;background:var(--ok);box-shadow:0 0 0 3px rgba(125,255,178,.18),0 0 14px rgba(125,255,178,.35);animation:recPulse 1s ease-in-out infinite}
+    #micStatus.error #micDot{background:var(--danger);box-shadow:0 0 0 3px rgba(255,122,156,.18),0 0 14px rgba(255,122,156,.35)}
+
+    #mobileInputWrap{position:absolute;left:50%;bottom:calc(var(--safe-bottom) + 136px);transform:translateX(-50%);z-index:35;display:none;width:min(88vw,340px);padding:8px 10px;border-radius:14px;background:rgba(15,23,51,.72);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(10px);text-align:center}
+    #mobileInputWrap.show{display:block}
+    #mobileInput{width:100%;padding:12px 14px;min-height:46px;border-radius:12px;outline:none;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);color:var(--text);text-align:center;font-size:16px}
+    #mobileHint{font-size:12px;color:var(--muted);margin-top:6px}
+
+    #tapToEnable{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);padding:14px 16px;border-radius:14px;background:rgba(0,0,0,.40);border:1px solid rgba(255,255,255,.18);backdrop-filter:blur(8px);z-index:80;text-align:center;max-width:min(92vw,360px)}
+    #tapToEnable strong{display:block;margin-bottom:6px}
+    #tapToEnable.hide{display:none}
+
+    #gameOver{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.55);z-index:90;backdrop-filter:blur(6px)}
+    #gameOver.show{display:flex}
+    .overCard{width:min(440px,calc(100% - 40px));padding:18px 16px;border-radius:16px;background:rgba(15,23,51,.85);border:1px solid rgba(255,255,255,.16);box-shadow:0 20px 60px rgba(0,0,0,.45);text-align:center}
+    .overTitle{font-size:22px;font-weight:900;margin:6px 0 10px}
+    .overStats{color:var(--muted);font-size:13px;line-height:1.6;margin-bottom:12px}
+
+    @media (max-width:900px){
+      #leaderboard{left:var(--safe-left);top:calc(var(--safe-top) + 118px);width:min(240px,46vw)}
+      #hud,#controlBar{max-width:calc(100vw - 24px)}
+      #controlBar{left:50%;right:auto;transform:translateX(-50%);top:auto;bottom:calc(var(--safe-bottom) + 12px);width:min(96vw,820px);justify-content:center}
+      #settings,#dictationPanel{top:auto;bottom:calc(var(--safe-bottom) + 72px)}
+      #kbdWrap{bottom:calc(var(--safe-bottom) + 74px)}
+      #mobileInputWrap{bottom:calc(var(--safe-bottom) + 198px)}
+    }
+    @media (max-width:640px){
+      #hud{padding:8px 10px;gap:6px;max-width:calc(100vw - 16px)}
+      .pill{padding:5px 8px}.pill .k{font-size:11px}.pill .v{font-size:13px}
+      #controlBar{position:fixed;left:50%;right:auto;transform:translateX(-50%);top:auto;bottom:calc(var(--safe-bottom) + 10px);width:min(96vw,420px);padding:10px;gap:8px;display:grid;grid-template-columns:1fr 1fr;align-items:stretch;z-index:55}
+      #controlBar .btn{display:block!important;width:100%;justify-self:stretch;min-width:0}
+      #settings,#dictationPanel{left:50%;right:auto;transform:translateX(-50%);width:min(94vw,360px)}
+      .row{gap:8px} input[type="range"]{width:120px} select{width:120px}
+      #kbdWrap{width:min(98vw,380px);padding:8px;bottom:calc(var(--safe-bottom) + 86px)}
+      .kbdRow{gap:4px}
+      #mobileInputWrap{bottom:calc(var(--safe-bottom) + 210px);width:min(92vw,360px);z-index:54}
+      #basicModeBtn,#advancedModeBtn,#startGameBtn,#startRecBtn,#settingsBtn{display:block!important;visibility:visible!important;opacity:1!important}
+    }
+  </style>
+</head>
+<body>
+  <div id="game" tabindex="0" aria-label="字母掉落小游戏">
+    <div id="flash"></div>
+
+    <div id="hud">
+      <div class="pill"><span class="k" id="labelScore">分数</span><span class="v" id="score">0</span></div>
+      <div class="pill warn"><span class="k" id="labelHp">生命</span><span class="v" id="hp">❤❤❤❤❤</span></div>
+      <div class="pill good"><span class="k" id="labelCombo">连击</span><span class="v" id="combo">0</span></div>
+      <div class="pill bad"><span class="k" id="labelMistakes">连错</span><span class="v" id="streakBad">0</span></div>
+      <div class="pill"><span class="k" id="labelLevel">Level</span><span class="v" id="level">1</span></div>
+      <div class="pill"><span class="k" id="labelRec">REC</span><span class="v" style="display:flex;align-items:center;gap:8px"><span id="recDot"></span><span id="recText">OFF</span></span></div>
+    </div>
+
+    <div id="leaderboard" aria-label="最高分排行榜">
+      <div id="leaderboardTitle">最高分 Top 5</div>
+      <div id="leaderboardList"></div>
+    </div>
+
+    <div id="controlBar">
+      <button class="btn" id="basicModeBtn">基础</button>
+      <button class="btn" id="advancedModeBtn">听写</button>
+      <button class="btn primary" id="startGameBtn">开始游戏</button>
+      <button class="btn" id="startRecBtn">开始录音</button>
+      <button class="btn" id="settingsBtn">设置</button>
+    </div>
+
+    <div id="dictationPanel" aria-live="polite">
+      <div id="dictationTitle">AI语音评分</div>
+      <div id="dictationBody">完成基础模式后，点击“听写”开始评分。</div>
+    </div>
+
+    <div id="settings">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;">
+        <strong id="settingsTitle" style="font-size:14px;">设置</strong>
+        <button class="btn" id="closeSettingsBtn" type="button" style="padding:6px 10px;min-height:auto;">关闭</button>
+      </div>
+      <div class="row"><label for="baseSpeed" id="labelBaseSpeed">基础掉落速度</label><input id="baseSpeed" type="range" min="21" max="184" value="80" /></div>
+      <div class="row"><label for="baseSpawn" id="labelBaseSpawn">字母出现速度(ms)</label><input id="baseSpawn" type="number" min="250" max="3000" step="50" value="900" /></div>
+      <div class="row"><label for="maxLetters" id="labelMaxLetters">最大同时字母数</label><input id="maxLetters" type="number" min="3" max="30" step="1" value="12" /></div>
+      <div class="row"><label for="hpMax" id="labelHpMax">最大生命(❤)</label><input id="hpMax" type="number" min="1" max="20" step="1" value="10" /></div>
+      <div class="row"><label for="levelEvery" id="labelLevelEvery">难度升级速度(秒)</label><input id="levelEvery" type="number" min="5" max="60" step="1" value="12" /></div>
+      <div class="row"><label for="voiceLang" id="labelVoiceLang">发音语言</label><select id="voiceLang"><option value="en-US">英语(美)</option><option value="en-GB">英语(英)</option><option value="en-AU">英语(澳)</option></select></div>
+      <div class="row"><label for="voiceDuration" id="labelVoiceDuration">发音时长倍率</label><input id="voiceDuration" type="range" min="1" max="4" step="0.5" value="2.5" /></div>
+      <div class="row"><label for="inputMode" id="labelInputMode">输入方式</label><select id="inputMode"><option value="keyboard">键盘输入</option><option value="voice" selected>语音输入</option></select></div>
+      <div class="small" id="settingsNote">手机和平板可直接点输入框调出系统键盘。录屏优先尝试 MP4；若浏览器不支持，会自动保存为 WebM。</div>
+      <div class="row"><button class="btn danger" id="clearLeaderboardBtn" style="width:100%;">清空排行榜</button></div>
+      <div class="row"><label for="uiLanguage" id="labelUiLanguage">界面语言</label><select id="uiLanguage"><option value="zh-CN">中文</option><option value="en">English</option></select></div>
+    </div>
+
+    <div id="micStatus"><span id="micDot"></span><span id="micLabel">语音输入中</span></div>
+
+    <div id="mobileInputWrap">
+      <input id="mobileInput" type="text" inputmode="text" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="1" placeholder="点这里，用手机键盘输入字母" />
+      <div id="mobileHint">手机/平板可用系统键盘；笔记本可直接敲实体键盘</div>
+    </div>
+
+    <div id="kbdWrap" aria-label="笔记本键盘">
+      <div class="kbdRow" id="row1"></div>
+      <div class="kbdRow" id="row2"></div>
+      <div class="kbdRow" id="row3"></div>
+    </div>
+
+    <div id="tapToEnable"><strong id="tapTitle">点一下启用音效/发音</strong><div class="small" id="tapBody">手机、平板、笔记本都需要先点击一次页面，浏览器才允许播放音效与语音。</div></div>
+    <div id="ground"></div>
+
+    <div id="gameOver">
+      <div class="overCard">
+        <div class="overTitle" id="gameOverTitle">Game Over</div>
+        <div class="overStats" id="overStats"></div>
+        <div style="display:flex;gap:10px;justify-content:center;margin-top:10px;">
+          <button class="btn primary" id="restartBtn">重新开始</button>
+          <button class="btn" id="closeOverBtn">关闭</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (() => {
+    const $ = (id) => document.getElementById(id);
+    const I18N = {
+      'zh-CN': {
+        basic:'基础', advanced:'听写', stopDictation:'停止听写', startGame:'开始游戏', endGame:'结束游戏', startRec:'开始录音', stopRec:'结束录音', settings:'设置', close:'关闭', restart:'重新开始',
+        score:'分数', hp:'生命', combo:'连击', mistakes:'连错', level:'Level', rec:'REC',
+        leaderboardTitle:'最高分 Top 5', noRecords:'暂无记录', clearLeaderboard:'清空排行榜',
+        baseSpeed:'基础掉落速度', baseSpawn:'字母出现速度(ms)', maxLetters:'最大同时字母数', hpMax:'最大生命(❤)', levelEvery:'难度升级速度(秒)', voiceLang:'发音语言', voiceDuration:'发音时长倍率', uiLanguage:'界面语言',
+        settingsNote:'手机和平板可直接点输入框调出系统键盘。录屏优先尝试 MP4；若浏览器不支持，会自动保存为 WebM。',
+        mobileHint:'手机/平板可用系统键盘；笔记本可直接敲实体键盘', mobilePlaceholder:'点这里，用手机键盘输入字母',
+        tapTitle:'点一下启用音效/发音', tapBody:'手机、平板、笔记本都需要先点击一次页面，浏览器才允许播放音效与语音。',
+        gameOver:'Game Over', reason:'原因', manualEnd:'手动结束', wrongKey:'按错（屏幕上没有该字母）', missed:'漏掉（落到底部）',
+        noClickedLetters:'还没有记录到点击字母', allCorrect:'全部正确，无需听写！', noScreenRecord:'当前设备或浏览器不支持网页内录屏。', recordStartFail:'录像启动失败：你可能取消了共享，或当前浏览器限制了录屏。',
+        leaderboardIntro:'当前浏览器保存的最高分排行榜如下。', rank:'第', place:'名', time:'时间',
+        dictationTitle:'AI语音评分', dictationReady:'完成基础模式后，点击“听写”开始评分。', dictationPrompt:'请跟读', dictationListening:'识别中', dictationMissed:'未识别', dictationResult:'评分结果', dictationStopped:'听写已停止', dictationFallback:'当前浏览器不支持语音评分，已切换为仅朗读听写。', dictationMicError:'麦克风不可用，已切换为仅朗读听写。',         dictationAverage:'平均分', dictationPassRate:'达标率', dictationHeard:'识别', allPassed:'🎉 全部过关！', dictationRemaining:'剩余未过关',
+        inputMode:'输入方式', inputKeyboard:'键盘输入', inputVoice:'语音输入', micListening:'语音输入中', micError:'语音不可用', voiceNotSupported:'当前浏览器不支持语音输入'
+      },
+      en: {
+        basic:'Basic', advanced:'Dictation', stopDictation:'Stop Dictation', startGame:'Start Game', endGame:'End Game', startRec:'Start Recording', stopRec:'Stop Recording', settings:'Settings', close:'Close', restart:'Restart',
+        score:'Score', hp:'Lives', combo:'Combo', mistakes:'Mistakes', level:'Level', rec:'REC',
+        leaderboardTitle:'Top 5 Scores', noRecords:'No records yet', clearLeaderboard:'Clear Leaderboard',
+        baseSpeed:'Base fall speed', baseSpawn:'Letter spawn speed (ms)', maxLetters:'Max letters on screen', hpMax:'Max lives (❤)', levelEvery:'Difficulty interval (sec)', voiceLang:'Voice language', voiceDuration:'Voice duration multiplier', uiLanguage:'Interface language',
+        settingsNote:'Phones and tablets can open the system keyboard directly. Recording tries MP4 first; if unsupported, it saves as WebM.',
+        mobileHint:'Phone/tablet: use system keyboard. Laptop: use physical keyboard.', mobilePlaceholder:'Tap here and type a letter',
+        tapTitle:'Tap once to enable audio/voice', tapBody:'On phones, tablets, and laptops, the browser needs one tap before audio and speech are allowed.',
+        gameOver:'Game Over', reason:'Reason', manualEnd:'Ended manually', wrongKey:'Wrong key (that letter is not on screen)', missed:'Missed (hit the bottom)',
+        noClickedLetters:'No clicked letters recorded yet', allCorrect:'All correct, no dictation needed!', noScreenRecord:'This device or browser does not support in-page screen recording.', recordStartFail:'Recording failed to start. You may have canceled sharing, or recording is restricted by the browser.',
+        leaderboardIntro:'Top scores saved in this browser are as follows.', rank:'#', place:'', time:'Time',
+        dictationTitle:'AI Pronunciation Score', dictationReady:'Finish basic mode, then tap Dictation to start scoring.', dictationPrompt:'Repeat', dictationListening:'Listening', dictationMissed:'No result', dictationResult:'Score', dictationStopped:'Dictation stopped.', dictationFallback:'Speech scoring is unavailable in this browser, so playback-only dictation is used instead.', dictationMicError:'Microphone is unavailable, so playback-only dictation is used instead.',         dictationAverage:'Average', dictationPassRate:'Pass rate', dictationHeard:'Heard', allPassed:'🎉 All passed!', dictationRemaining:'Remaining',
+        inputMode:'Input mode', inputKeyboard:'Keyboard', inputVoice:'Voice', micListening:'Voice input active', micError:'Voice unavailable', voiceNotSupported:'Voice input is not supported in this browser'
+      }
+    };
+
+    const game = $('game');
+    const flash = $('flash');
+    const scoreEl = $('score');
+    const comboEl = $('combo');
+    const streakBadEl = $('streakBad');
+    const hpEl = $('hp');
+    const levelEl = $('level');
+    const recDot = $('recDot');
+    const recText = $('recText');
+    const leaderboardList = $('leaderboardList');
+    const settings = $('settings');
+    const dictationPanel = $('dictationPanel');
+    const dictationTitle = $('dictationTitle');
+    const dictationBody = $('dictationBody');
+    const mobileInputWrap = $('mobileInputWrap');
+    const mobileInput = $('mobileInput');
+    const overStats = $('overStats');
+
+    const settingsBtn = $('settingsBtn');
+    const closeSettingsBtn = $('closeSettingsBtn');
+    const basicModeBtn = $('basicModeBtn');
+    const advancedModeBtn = $('advancedModeBtn');
+    const startGameBtn = $('startGameBtn');
+    const startRecBtn = $('startRecBtn');
+    const restartBtn = $('restartBtn');
+    const closeOverBtn = $('closeOverBtn');
+    const clearLeaderboardBtn = $('clearLeaderboardBtn');
+
+    const baseSpeedRange = $('baseSpeed');
+    const baseSpawnInput = $('baseSpawn');
+    const maxLettersInput = $('maxLetters');
+    const hpMaxInput = $('hpMax');
+    const levelEveryInput = $('levelEvery');
+    const voiceLangSel = $('voiceLang');
+    const voiceDurationRange = $('voiceDuration');
+    const uiLanguageSel = $('uiLanguage');
+    const inputModeSel = $('inputMode');
+    const micStatus = $('micStatus');
+    const micLabel = $('micLabel');
+    const tapToEnable = $('tapToEnable');
+    const gameOver = $('gameOver');
+
+    function t(key){
+      const lang = uiLanguageSel?.value || 'zh-CN';
+      return (I18N[lang] && I18N[lang][key]) || I18N['zh-CN'][key] || key;
+    }
+
+    const KEY_ROWS = [
+      ['q','w','e','r','t','y','u','i','o','p'],
+      ['a','s','d','f','g','h','j','k','l'],
+      ['z','x','c','v','b','n','m']
+    ];
+    const keyEls = new Map();
+    function buildKeyboard(){
+      [$('row1'), $('row2'), $('row3')].forEach((row, i) => {
+        row.innerHTML = '';
+        KEY_ROWS[i].forEach(ch => {
+          const el = document.createElement('div');
+          el.className = 'key';
+          el.textContent = ch.toUpperCase();
+          el.dataset.ch = ch;
+          row.appendChild(el);
+          keyEls.set(ch, el);
+        });
+      });
+    }
+    buildKeyboard();
+    function clearKeyClasses(){ keyEls.forEach(el => el.classList.remove('active','newest','pressed')); }
+
+    function isTouchLike(){ return window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window; }
+    function applyInputModeUI(){
+      const voice = typeof isVoiceMode === 'function' && isVoiceMode();
+      $('kbdWrap').style.display = voice ? 'none' : '';
+      mobileInputWrap.classList.toggle('show', !voice && isTouchLike());
+      if (!voice && typeof setMicUI === 'function') setMicUI('off');
+    }
+    function updateInputMode(){
+      applyInputModeUI();
+      const controlBar = $('controlBar');
+      controlBar.style.visibility = 'visible';
+      if (isTouchLike()) {
+        controlBar.style.display = 'grid';
+        controlBar.style.gridTemplateColumns = '1fr 1fr';
+      } else {
+        controlBar.style.display = 'flex';
+        controlBar.style.gridTemplateColumns = '';
+      }
+    }
+    updateInputMode();
+    window.addEventListener('resize', updateInputMode);
+
+    let audioCtx = null;
+    let audioUnlocked = false;
+    function ensureAudio(){
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      audioUnlocked = true;
+    }
+    function playWater(){
+      if (!audioUnlocked) return;
+      const ctx = audioCtx;
+      const dur = 0.22;
+      const now = ctx.currentTime;
+      const sr = ctx.sampleRate;
+      const buffer = ctx.createBuffer(1, Math.floor(sr * dur), sr);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) {
+        const t0 = i / data.length;
+        data[i] = (Math.random() * 2 - 1) * Math.exp(-6 * t0);
+      }
+      const src = ctx.createBufferSource();
+      src.buffer = buffer;
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 1200;
+      bp.Q.value = 0.9;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.22, now + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+      src.connect(bp).connect(gain).connect(ctx.destination);
+      src.start(now);
+      src.stop(now + dur);
+    }
+    function playFlute(){
+      if (!audioUnlocked) return;
+      const ctx = audioCtx;
+      const now = ctx.currentTime;
+      const dur = 0.55;
+      const osc1 = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
+      const lfo = ctx.createOscillator();
+      osc1.type = 'sine'; osc2.type = 'sine'; lfo.type = 'sine';
+      osc1.frequency.value = 880; osc2.frequency.value = 1760; lfo.frequency.value = 6;
+      const lfoGain = ctx.createGain(); lfoGain.gain.value = 10;
+      lfo.connect(lfoGain).connect(osc1.frequency);
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.2, now + 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+      const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 400;
+      const mix = ctx.createGain();
+      const osc2Gain = ctx.createGain(); osc2Gain.gain.value = 0.25;
+      osc1.connect(mix); osc2.connect(osc2Gain).connect(mix);
+      mix.connect(hp).connect(gain).connect(ctx.destination);
+      lfo.start(now); osc1.start(now); osc2.start(now);
+      lfo.stop(now + dur); osc1.stop(now + dur); osc2.stop(now + dur);
+    }
+    function speakLetter(text, rateOverride = null, langOverride = null){
+      try{
+        const multiplier = Math.max(1, Number(voiceDurationRange.value) || 2);
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = langOverride || voiceLangSel.value || 'en-US';
+        u.pitch = 1;
+        u.rate = rateOverride ?? (0.95 / multiplier);
+        window.speechSynthesis.speak(u);
+      }catch(e){}
+    }
+    const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+    const LETTER_ALIASES = {
+      a:['a','ay','ei','hey','ey','eh','aye','ae','ah'], b:['b','bee','be','bea','bee','bi','beef','beat','bean','beach'],
+      c:['c','see','sea','si','cee','she','seed','seen','scene'], d:['d','dee','de','di','deal','dean','deep','dear'],
+      e:['e','ee','ea','ye','he','she','easy','eat','each'], f:['f','ef','eff','have','half','if','effort','left'],
+      g:['g','gee','ge','ji','gig','geek','jeep','gene'], h:['h','aitch','age','ache','each','hey','hitch','itch'],
+      i:['i','eye','ai','aye','hi','I','ice','high','eyes'], j:['j','jay','je','jai','jade','jane','jake','jail'],
+      k:['k','kay','ke','okay','ok','cake','kate','case'], l:['l','el','ale','all','hell','else','bell','well'],
+      m:['m','em','am','him','me','him','men','man','my'], n:['n','en','in','an','and','end','inn','hen','pen'],
+      o:['o','oh','owe','no','so','go','old','own','over'], p:['p','pee','pe','pi','pie','pea','peace','piece','peak'],
+      q:['q','queue','cue','cu','kew','cute','few','new','que'], r:['r','are','ar','our','or','art','arm','err','her'],
+      s:['s','ess','es','yes','is','as','us','sir','said'], t:['t','tee','tea','te','ti','tree','three','teen','team'],
+      u:['u','you','yew','yu','do','to','too','two','who','new','use'], v:['v','vee','ve','we','vi','the','van','very','via'],
+      w:['w','double u','double you','du','dub','dubya'], x:['x','ex','ax','axe','eggs','next','text','extra'],
+      y:['y','why','wi','way','wye','white','wide','wine'], z:['z','zee','zed','ze','zeal','zero','zip','zoo']
+    };
+    function normalizeSpeechText(text){
+      return String(text || '').toLowerCase().replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+    function transcriptToLetter(text){
+      const normalized = normalizeSpeechText(text);
+      if (!normalized) return '';
+      if (normalized.length === 1 && normalized >= 'a' && normalized <= 'z') return normalized;
+      for (const [letter, aliases] of Object.entries(LETTER_ALIASES)) {
+        if (aliases.includes(normalized)) return letter;
+      }
+      const parts = normalized.split(' ');
+      for (const part of parts) {
+        if (part.length === 1 && part >= 'a' && part <= 'z') return part;
+        for (const [letter, aliases] of Object.entries(LETTER_ALIASES)) {
+          if (aliases.includes(part)) return letter;
+        }
+      }
+      let bestLetter = '';
+      let bestScore = 0;
+      const candidates = [normalized, ...parts];
+      for (const candidate of candidates) {
+        if (!candidate) continue;
+        for (const [letter, aliases] of Object.entries(LETTER_ALIASES)) {
+          for (const alias of aliases) {
+            const s = scoreAliasSimilarity(candidate, alias);
+            if (s > bestScore) { bestScore = s; bestLetter = letter; }
+          }
+        }
+      }
+      return bestScore >= 65 ? bestLetter : '';
+    }
+    function levenshtein(a, b){
+      const s = a || '';
+      const t = b || '';
+      const rows = s.length + 1;
+      const cols = t.length + 1;
+      const dp = Array.from({ length: rows }, () => Array(cols).fill(0));
+      for (let i = 0; i < rows; i++) dp[i][0] = i;
+      for (let j = 0; j < cols; j++) dp[0][j] = j;
+      for (let i = 1; i < rows; i++) {
+        for (let j = 1; j < cols; j++) {
+          const cost = s[i - 1] === t[j - 1] ? 0 : 1;
+          dp[i][j] = Math.min(
+            dp[i - 1][j] + 1,
+            dp[i][j - 1] + 1,
+            dp[i - 1][j - 1] + cost
+          );
+        }
+      }
+      return dp[rows - 1][cols - 1];
+    }
+    function scoreAliasSimilarity(spoken, alias){
+      const heard = normalizeSpeechText(spoken);
+      const target = normalizeSpeechText(alias);
+      if (!heard || !target) return 0;
+      if (heard === target) return 100;
+      if (heard.includes(target) || target.includes(heard)) return 92;
+      const distance = levenshtein(heard, target);
+      const maxLen = Math.max(heard.length, target.length, 1);
+      const similarity = 1 - (distance / maxLen);
+      return Math.max(0, Math.min(100, Math.round(similarity * 100)));
+    }
+    function scorePronunciation(expected, alternatives = []){
+      const aliases = LETTER_ALIASES[expected] || [expected];
+      const fallbackAlternatives = alternatives.length ? alternatives : [{ transcript: '', confidence: 0 }];
+      let best = { heard: '', score: 0, pass: false };
+      for (const alt of fallbackAlternatives) {
+        const transcript = normalizeSpeechText(alt.transcript);
+        const confidence = Number.isFinite(alt.confidence) ? alt.confidence : 0;
+        let aliasScore = 0;
+        for (const alias of aliases) aliasScore = Math.max(aliasScore, scoreAliasSimilarity(transcript, alias));
+        const mappedLetter = transcriptToLetter(transcript);
+        if (mappedLetter === expected) aliasScore = Math.max(aliasScore, 96);
+        else if (mappedLetter && mappedLetter !== expected) aliasScore = Math.min(aliasScore, 45);
+        const finalScore = Math.max(0, Math.min(100, Math.round(aliasScore + Math.min(6, confidence * 10))));
+        if (finalScore > best.score) {
+          best = { heard: transcript || '', score: finalScore, pass: finalScore >= 70 };
+        }
+      }
+      return best;
+    }
+
+    const SCORE_STORAGE_KEY = 'letter_fall_top5_scores_v1';
+    let latestSavedRecordKey = null;
+    function formatTimestamp(ts){
+      const d = new Date(ts);
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    }
+    function loadTopScores(){
+      try {
+        const raw = localStorage.getItem(SCORE_STORAGE_KEY);
+        const arr = raw ? JSON.parse(raw) : [];
+        return Array.isArray(arr) ? arr : [];
+      } catch { return []; }
+    }
+    function saveTopScores(arr){ try { localStorage.setItem(SCORE_STORAGE_KEY, JSON.stringify(arr)); } catch {} }
+    function renderLeaderboard(){
+      const items = loadTopScores();
+      leaderboardList.innerHTML = '';
+      if (!items.length) {
+        const empty = document.createElement('div');
+        empty.className = 'lbTime';
+        empty.textContent = t('noRecords');
+        leaderboardList.appendChild(empty);
+        return;
+      }
+      items.slice(0,5).forEach((item, idx) => {
+        const rowKey = `${item.score}_${item.timestamp}`;
+        const row = document.createElement('div');
+        row.className = 'lbItem' + (rowKey === latestSavedRecordKey ? ' current' : '');
+        row.innerHTML = `<div class="lbRank">#${idx+1}</div><div class="lbScore">${item.score}</div><div class="lbTime">${formatTimestamp(item.timestamp)}</div>`;
+        leaderboardList.appendChild(row);
+      });
+    }
+    function announceLeaderboard(){
+      const items = loadTopScores();
+      if (!items.length) return;
+      const lang = uiLanguageSel.value || 'zh-CN';
+      const text = items.slice(0,5).map((item, idx) => {
+        if (lang === 'en') return `Rank ${idx+1}, score ${item.score}, time ${formatTimestamp(item.timestamp)}`;
+        return `第${idx+1}名，${item.score}分，时间 ${formatTimestamp(item.timestamp)}`;
+      }).join('。');
+      window.speechSynthesis.cancel();
+      speakLetter(`${t('leaderboardIntro')} ${text}。`, 0.95, lang === 'en' ? 'en-US' : 'zh-CN');
+    }
+    function maybeSaveTopScore(finalScore){
+      const record = { score: finalScore, timestamp: Date.now() };
+      const items = loadTopScores();
+      items.push(record);
+      items.sort((a,b) => b.score - a.score || a.timestamp - b.timestamp);
+      const top5 = items.slice(0,5);
+      latestSavedRecordKey = top5.some(x => x.score === record.score && x.timestamp === record.timestamp)
+        ? `${record.score}_${record.timestamp}`
+        : null;
+      saveTopScores(top5);
+      renderLeaderboard();
+    }
+
+    let recStream = null;
+    let recorder = null;
+    let recChunks = [];
+    let recMime = null;
+    function pickRecorderMime(){
+      const candidates = ['video/mp4;codecs=avc1.42E01E,mp4a.40.2','video/mp4','video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'];
+      return candidates.find(m => window.MediaRecorder && MediaRecorder.isTypeSupported(m)) || '';
+    }
+    function setRecUI(on){
+      recDot.classList.toggle('on', on);
+      recText.textContent = on ? 'ON' : 'OFF';
+      startRecBtn.textContent = on ? t('stopRec') : t('startRec');
+      startRecBtn.classList.toggle('danger', on);
+      startRecBtn.classList.toggle('primary', !on);
+    }
+    async function startRecording(){
+      if (!navigator.mediaDevices?.getDisplayMedia) {
+        alert(t('noScreenRecord'));
+        return;
+      }
+      try {
+        recStream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30 }, audio: true });
+        recChunks = [];
+        recMime = pickRecorderMime();
+        recorder = new MediaRecorder(recStream, recMime ? { mimeType: recMime } : undefined);
+        recorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) recChunks.push(e.data); };
+        recorder.onstop = () => {
+          const type = recMime || recorder?.mimeType || 'video/webm';
+          const blob = new Blob(recChunks, { type });
+          const url = URL.createObjectURL(blob);
+          const ext = type.includes('mp4') ? 'mp4' : 'webm';
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `letter-fall-recording.${ext}`;
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(url), 4000);
+          if (recStream) recStream.getTracks().forEach(track => track.stop());
+          recStream = null;
+          recorder = null;
+          recChunks = [];
+          setRecUI(false);
+        };
+        recStream.getVideoTracks()[0].addEventListener('ended', () => {
+          if (recorder && recorder.state !== 'inactive') recorder.stop();
+        });
+        recorder.start(1000);
+        setRecUI(true);
+      } catch {
+        alert(t('recordStartFail'));
+        setRecUI(false);
+      }
+    }
+    function stopRecording(){
+      try {
+        if (recorder && recorder.state !== 'inactive') recorder.stop();
+        else setRecUI(false);
+      } catch {
+        setRecUI(false);
+      }
+    }
+
+    function isVoiceMode(){ return inputModeSel.value === 'voice'; }
+    let voiceRecognition = null;
+    let voiceInputActive = false;
+    function setMicUI(state){
+      if (state === 'listening') {
+        micStatus.classList.add('show');
+        micStatus.classList.remove('error');
+        micLabel.textContent = t('micListening');
+      } else if (state === 'error') {
+        micStatus.classList.add('show','error');
+        micLabel.textContent = t('micError');
+      } else {
+        micStatus.classList.remove('show','error');
+      }
+    }
+    async function ensureMicPermission(){
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach(t => t.stop());
+        return true;
+      } catch { return false; }
+    }
+    function startVoiceInput(){
+      if (voiceInputActive) return;
+      if (!SpeechRecognitionCtor) {
+        alert(t('voiceNotSupported'));
+        inputModeSel.value = 'keyboard';
+        return;
+      }
+      if (dictationSession?.active) return;
+      voiceInputActive = true;
+      setMicUI('listening');
+      ensureMicPermission().then(granted => {
+        if (!granted || !voiceInputActive) {
+          voiceInputActive = false;
+          setMicUI('error');
+          return;
+        }
+        launchRecognition();
+      });
+    }
+    function launchRecognition(){
+      const recognition = new SpeechRecognitionCtor();
+      recognition.lang = voiceLangSel.value || 'en-US';
+      recognition.interimResults = false;
+      recognition.continuous = true;
+      recognition.maxAlternatives = 5;
+      recognition.onresult = (event) => {
+        if (!voiceInputActive) return;
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const result = event.results[i];
+          if (!result.isFinal) continue;
+          let bestLetter = '';
+          let bestScore = 0;
+          for (let j = 0; j < result.length; j++) {
+            const letter = transcriptToLetter(result[j].transcript);
+            if (letter) {
+              const conf = Number.isFinite(result[j].confidence) ? result[j].confidence : 0.5;
+              const score = conf + (j === 0 ? 0.1 : 0);
+              if (score > bestScore) { bestScore = score; bestLetter = letter; }
+            }
+          }
+          if (bestLetter) processLetterKey(bestLetter);
+        }
+      };
+      let permissionDenied = false;
+      recognition.onerror = (event) => {
+        if (!voiceInputActive) return;
+        if (['not-allowed','service-not-allowed','audio-capture'].includes(event.error)) {
+          permissionDenied = true;
+          stopVoiceInput();
+          inputModeSel.value = 'keyboard';
+          applyInputModeUI();
+          if (running) focusBestInput();
+          return;
+        }
+      };
+      recognition.onend = () => {
+        if (!voiceInputActive || permissionDenied) return;
+        try { recognition.start(); } catch {}
+      };
+      voiceRecognition = recognition;
+      try { recognition.start(); setMicUI('listening'); } catch { setMicUI('error'); }
+    }
+    function stopVoiceInput(){
+      voiceInputActive = false;
+      if (voiceRecognition) {
+        voiceRecognition.onend = null;
+        voiceRecognition.onresult = null;
+        voiceRecognition.onerror = null;
+        try { voiceRecognition.stop(); } catch {}
+        voiceRecognition = null;
+      }
+      setMicUI('off');
+    }
+
+    let letters = [];
+    let settledLetters = [];
+    let recentlyFallen = [];
+    let lastT = performance.now();
+    let spawnTimer = 0;
+    let running = false;
+    let gameMode = 'normal';
+    let score = 0;
+    let combo = 0;
+    let streakBad = 0;
+    let level = 1;
+    let elapsed = 0;
+    let hpMax = Number(hpMaxInput.value);
+    let hp = hpMax;
+    let maxComboSeen = 0;
+    let basicNextIndex = 0;
+    let basicClickedSequence = [];
+    let dictationSession = null;
+
+    function currentFallSpeed(){
+      const base = Number(baseSpeedRange.value);
+      const speed = base * (1 + 0.07 * (level - 1));
+      return isVoiceMode() ? speed * 0.25 : speed;
+    }
+    function currentSpawnInterval(){
+      const base = Math.max(200, Number(baseSpawnInput.value) || 900);
+      const interval = Math.max(220, base * Math.pow(0.94, level - 1));
+      return isVoiceMode() ? interval * 3.0 : interval;
+    }
+    function maxLetters(){ return Math.max(3, Number(maxLettersInput.value) || 12); }
+    function levelEverySec(){ return Math.max(5, Number(levelEveryInput.value) || 12); }
+    function setGameToggleUI(on){
+      startGameBtn.textContent = on ? t('endGame') : t('startGame');
+      startGameBtn.classList.toggle('danger', on);
+      startGameBtn.classList.toggle('primary', !on);
+    }
+    function setDictationButtonUI(on){
+      advancedModeBtn.textContent = on ? t('stopDictation') : t('advanced');
+      advancedModeBtn.classList.toggle('danger', on);
+      advancedModeBtn.classList.toggle('primary', !on);
+    }
+    function showDictationPanel(message){
+      dictationPanel.classList.add('show');
+      dictationBody.textContent = message;
+      repositionSettledLetters();
+    }
+    function clearBasicSpeechTimers(obj){
+      if (!obj?.speechTimers?.length) return;
+      obj.speechTimers.forEach(id => clearTimeout(id));
+      obj.speechTimers = [];
+    }
+    function scheduleBasicSpeech(obj){
+      if (!obj?.basic) return;
+      clearBasicSpeechTimers(obj);
+      const delays = [0, 1150, 2300];
+      obj.speechTimers = delays.map(delay => setTimeout(() => {
+        if (!running || !obj.alive || obj.clicked || obj.settled) return;
+        window.speechSynthesis.cancel();
+        speakLetter(obj.ch);
+      }, delay));
+    }
+    function isBasicDictationPaused(){
+      return gameMode === 'basic' && !!dictationSession?.active;
+    }
+    function syncBasicLetterSpeech(paused){
+      letters.forEach(obj => {
+        if (!obj.alive || !obj.basic) return;
+        if (paused) clearBasicSpeechTimers(obj);
+        else scheduleBasicSpeech(obj);
+      });
+    }
+    function renderHP(){
+      if (gameMode === 'basic') { hpEl.textContent = '∞'; return; }
+      hpMax = Math.max(1, Math.min(20, Number(hpMaxInput.value) || 10));
+      hp = Math.min(hp, hpMax);
+      hpEl.textContent = '❤'.repeat(hp) + '♡'.repeat(Math.max(0, hpMax - hp));
+    }
+    function updateHUD(){
+      scoreEl.textContent = String(score);
+      comboEl.textContent = String(combo);
+      streakBadEl.textContent = String(streakBad);
+      levelEl.textContent = String(level);
+      renderHP();
+    }
+    function showBadFlash(){
+      flash.classList.remove('bad');
+      void flash.offsetWidth;
+      flash.classList.add('bad');
+    }
+
+    const COLORS = ['#eaf1ff','#7aa7ff','#ffd37a','#7dffb2','#ff7a9c'];
+    const rand = (a,b) => Math.random() * (b - a) + a;
+    const pick = (arr) => arr[(Math.random() * arr.length) | 0];
+    function topSpawnY(topBlocked){ return Math.max(36, Math.min(80, topBlocked * 0.2)); }
+
+    function getGameBounds(){
+      const hudRect = $('hud').getBoundingClientRect();
+      const controlRect = $('controlBar').getBoundingClientRect();
+      const kbdWrapEl = $('kbdWrap');
+      const kbdVisible = kbdWrapEl.offsetParent !== null || kbdWrapEl.style.display !== 'none';
+      const kbdRect = kbdVisible ? kbdWrapEl.getBoundingClientRect() : null;
+      const mobileRect = mobileInputWrap.classList.contains('show') ? mobileInputWrap.getBoundingClientRect() : null;
+      const topBlocked = Math.max(hudRect.bottom, 20) + 18;
+      const candidates = [];
+      if (kbdRect && kbdRect.height > 0) candidates.push(kbdRect.top);
+      if (mobileRect) candidates.push(mobileRect.top);
+      if (controlRect.top > window.innerHeight * 0.55) candidates.push(controlRect.top);
+      const bottomAnchorTop = candidates.length ? Math.min(...candidates) : window.innerHeight;
+      const bottomBlocked = Math.max(40, window.innerHeight - bottomAnchorTop + 22);
+      return { topBlocked, bottomBlocked };
+    }
+
+    function spawnLetter(chOverride = null){
+      if (!running || letters.length >= maxLetters()) return;
+      const bounds = getGameBounds();
+      const x = gameMode === 'basic' ? game.clientWidth / 2 : rand(30, game.clientWidth - 30);
+      const y = topSpawnY(bounds.topBlocked);
+      const voiceBasic = gameMode === 'basic' && isVoiceMode();
+      const deathLine = voiceBasic
+        ? game.clientHeight - 40
+        : Math.max(bounds.topBlocked + 120, game.clientHeight - bounds.bottomBlocked + 10);
+      const ch = chOverride || String.fromCharCode(97 + ((Math.random() * 26) | 0));
+      const el = document.createElement('div');
+      el.className = 'letter';
+      el.textContent = ch;
+      el.style.left = `${x}px`;
+      el.style.top = `${y}px`;
+      el.style.color = pick(COLORS);
+      el.style.fontSize = `${Math.max(26, Math.min(64, game.clientWidth * (gameMode === 'basic' ? 0.065 : 0.06) + rand(0, 16)))}px`;
+      game.appendChild(el);
+      const basicDuration = voiceBasic ? 8.0 : 3.35;
+      const basicVy = Math.max(48, (deathLine - y) / basicDuration);
+      const obj = { ch, el, x, y, vy: gameMode === 'basic' ? basicVy : currentFallSpeed() * rand(0.85, 1.15), alive: true, basic: gameMode === 'basic', order: -1, clicked: false, settled: false, speechTimers: [] };
+      letters.push(obj);
+      const key = keyEls.get(ch);
+      if (key) {
+        key.classList.add('newest');
+        setTimeout(() => key.classList.remove('newest'), 450);
+      }
+      if (obj.basic) scheduleBasicSpeech(obj);
+    }
+    function spawnNextBasicLetter(){
+      if (!running || gameMode !== 'basic' || basicNextIndex >= 26) return;
+      const ch = String.fromCharCode(97 + basicNextIndex);
+      basicNextIndex += 1;
+      spawnLetter(ch);
+    }
+    function removeLetter(obj){
+      obj.alive = false;
+      clearBasicSpeechTimers(obj);
+      if (obj.el?.parentNode) obj.el.parentNode.removeChild(obj.el);
+    }
+    function renderKeyboardHighlights(){
+      keyEls.forEach(el => el.classList.remove('active'));
+      const set = new Set();
+      letters.forEach(obj => { if (obj.alive) set.add(obj.ch); });
+      set.forEach(ch => keyEls.get(ch)?.classList.add('active'));
+    }
+    function penalize(reason){
+      if (gameMode === 'basic') return;
+      combo = 0;
+      streakBad += 1;
+      hp = Math.max(0, hp - 1);
+      playFlute();
+      showBadFlash();
+      updateHUD();
+      if (hp <= 0) endGame(reason);
+    }
+
+    function getSettledLayoutMetrics(totalCount = settledLetters.length){
+      const bounds = getGameBounds();
+      const areaTop = bounds.topBlocked + 20;
+      const areaBottom = game.clientHeight - bounds.bottomBlocked - 20;
+      const availableLeft = 28;
+      const availableWidth = Math.max(260, game.clientWidth - 56);
+      const cols = 13;
+      const count = Math.max(1, totalCount);
+      const rows = count > cols ? 2 : 1;
+      const rowGap = Math.min(70, Math.max(48, 60));
+      const blockHeight = (rows - 1) * rowGap;
+      const midY = (areaTop + areaBottom) / 2;
+      const centerY = midY - blockHeight / 2;
+      return { availableLeft, availableWidth, cols, count, rows, rowGap, centerY };
+    }
+    function computeSettledPosition(order, totalCount = settledLetters.length){
+      const layout = getSettledLayoutMetrics(totalCount);
+      const { availableLeft, availableWidth, cols, count, rowGap, centerY } = layout;
+      const row = Math.floor(order / cols);
+      const col = order % cols;
+      const itemsBeforeRow = row * cols;
+      const totalInRow = Math.min(cols, Math.max(0, count - itemsBeforeRow));
+      const spacingX = totalInRow <= 1 ? 0 : Math.min(58, Math.max(28, availableWidth / Math.max(1, totalInRow - 1)));
+      const rowWidth = (totalInRow - 1) * spacingX;
+      const startX = availableLeft + (availableWidth - rowWidth) / 2;
+      return { x: startX + col * spacingX, y: centerY + row * rowGap };
+    }
+    function applySettledLetterStyle(obj, totalCount = settledLetters.length){
+      if (!obj?.el) return;
+      const layout = getSettledLayoutMetrics(totalCount);
+      const row = Math.floor(obj.order / layout.cols);
+      const itemsBeforeRow = row * layout.cols;
+      const totalInRow = Math.min(layout.cols, Math.max(1, layout.count - itemsBeforeRow));
+      const spacingX = totalInRow <= 1 ? 58 : Math.min(58, Math.max(28, layout.availableWidth / Math.max(1, totalInRow - 1)));
+      const baseFontSize = Math.max(18, Math.min(34, Math.floor(spacingX / 1.6)));
+      if (obj.clicked) {
+        obj.el.style.fontSize = `${Math.round(baseFontSize * 1.5)}px`;
+      } else {
+        obj.el.style.fontSize = `${baseFontSize}px`;
+      }
+    }
+    function settleBasicLetter(obj){
+      if (obj.settled) return;
+      clearBasicSpeechTimers(obj);
+      obj.order = settledLetters.length;
+      obj.alive = false;
+      obj.settled = true;
+      obj.vy = 0;
+      obj.el.style.opacity = '1';
+      obj.el.classList.remove('hit');
+      if (obj.clicked) {
+        obj.el.classList.add('settled-clicked');
+      } else {
+        obj.el.classList.remove('settled-clicked');
+        obj.el.style.color = 'rgba(255,255,255,.35)';
+      }
+      settledLetters.push(obj);
+      letters = letters.filter(x => x !== obj);
+      repositionSettledLetters();
+      if (basicNextIndex < 26) spawnNextBasicLetter();
+    }
+    function repositionSettledLetters(){
+      settledLetters.forEach(obj => {
+        if (!obj.el) return;
+        const pos = computeSettledPosition(obj.order, settledLetters.length);
+        obj.x = pos.x;
+        obj.y = pos.y;
+        obj.el.style.left = `${pos.x}px`;
+        obj.el.style.top = `${pos.y}px`;
+        applySettledLetterStyle(obj, settledLetters.length);
+      });
+    }
+    function clearAllLetters(){
+      letters.forEach(obj => {
+        clearBasicSpeechTimers(obj);
+        if (obj.el?.parentNode) obj.el.parentNode.removeChild(obj.el);
+      });
+      settledLetters.forEach(obj => {
+        clearBasicSpeechTimers(obj);
+        if (obj.el?.parentNode) obj.el.parentNode.removeChild(obj.el);
+      });
+      letters = [];
+      settledLetters = [];
+    }
+
+    function onCorrect(ch, obj){
+      obj.el.classList.add('hit');
+      playWater();
+      window.speechSynthesis.cancel();
+      speakLetter(ch);
+      combo += 1;
+      streakBad = 0;
+      score += 10 + Math.min(20, combo);
+      maxComboSeen = Math.max(maxComboSeen, combo);
+      updateHUD();
+      if (gameMode === 'basic' && obj.basic) {
+        obj.clicked = true;
+        basicClickedSequence.push(ch);
+        setTimeout(() => settleBasicLetter(obj), 260);
+      } else {
+        setTimeout(() => removeLetter(obj), 220);
+      }
+    }
+
+    function playSequenceOnly(){
+      const clickedSet = new Set(basicClickedSequence);
+      const seq = settledLetters.map(o => o.ch).filter(ch => !clickedSet.has(ch));
+      window.speechSynthesis.cancel();
+      if (!seq.length) {
+        speakLetter(t('allCorrect'), 0.9, uiLanguageSel.value === 'en' ? 'en-US' : 'zh-CN');
+        return;
+      }
+      let i = 0;
+      const speakNext = () => {
+        if (i >= seq.length) return;
+        speakLetter(seq[i], 0.8);
+        i += 1;
+        if (i < seq.length) setTimeout(speakNext, 1000);
+      };
+      speakNext();
+    }
+    function stopDictationSession(message = '', resumeBasic = true){
+      if (!dictationSession) {
+        if (message) showDictationPanel(message);
+        setDictationButtonUI(false);
+        return;
+      }
+      dictationSession.active = false;
+      dictationSession.awaiting = false;
+      clearTimeout(dictationSession.waitTimer);
+      clearTimeout(dictationSession.stepTimer);
+      window.speechSynthesis.cancel();
+      if (dictationSession.recognition) {
+        dictationSession.recognition.onend = null;
+        dictationSession.recognition.onresult = null;
+        dictationSession.recognition.onerror = null;
+        try { dictationSession.recognition.stop(); } catch {}
+      }
+      dictationSession = null;
+      setDictationButtonUI(false);
+      if (resumeBasic && running && gameMode === 'basic') syncBasicLetterSpeech(false);
+      if (resumeBasic && running && isVoiceMode()) startVoiceInput();
+      if (message) showDictationPanel(message);
+    }
+    function finishDictationSession(){
+      if (!dictationSession) return;
+      const session = dictationSession;
+      const total = Math.max(1, session.sequence.length);
+      const average = Math.round(session.totalScore / total);
+      const passRate = Math.round((session.passCount / total) * 100);
+      const details = session.results.map(item => `${item.expected.toUpperCase()}: ${item.score}`).join('  ');
+      const clickedSet = new Set(basicClickedSequence);
+      const remaining = settledLetters.filter(o => !clickedSet.has(o.ch)).length;
+      let summary = `${t('dictationResult')}\n${t('dictationAverage')}: ${average}\n${t('dictationPassRate')}: ${passRate}%\n${details}`;
+      if (remaining === 0) {
+        summary += `\n${t('allPassed')}`;
+      } else {
+        summary += `\n${t('dictationRemaining')}: ${remaining}`;
+      }
+      stopDictationSession(summary);
+    }
+    function markLetterAsRecognized(ch){
+      if (!basicClickedSequence.includes(ch)) basicClickedSequence.push(ch);
+      const obj = settledLetters.find(o => o.ch === ch && !o.clicked);
+      if (obj) {
+        obj.clicked = true;
+        obj.el.classList.add('settled-clicked');
+        obj.el.style.color = '';
+        repositionSettledLetters();
+      }
+    }
+    function completeDictationAttempt(result){
+      const session = dictationSession;
+      if (!session || !session.active || !session.awaiting) return;
+      session.awaiting = false;
+      clearTimeout(session.waitTimer);
+      const expected = session.sequence[session.index];
+      const evaluation = result || { heard: '', score: 0, pass: false };
+      session.results.push({ expected, heard: evaluation.heard, score: evaluation.score, pass: evaluation.pass });
+      session.totalScore += evaluation.score;
+      if (evaluation.pass) session.passCount += 1;
+      if (evaluation.score > 80) markLetterAsRecognized(expected);
+      session.index += 1;
+      if (session.index >= session.sequence.length) {
+        session.stepTimer = setTimeout(finishDictationSession, 500);
+      } else {
+        const heardText = evaluation.heard || t('dictationMissed');
+        showDictationPanel(`${expected.toUpperCase()}: ${evaluation.score}\n${t('dictationHeard')}: ${heardText}\n${t('dictationAverage')}: ${Math.round(session.totalScore / session.results.length)}`);
+        session.stepTimer = setTimeout(runDictationStep, 900);
+      }
+    }
+    function runDictationStep(){
+      const session = dictationSession;
+      if (!session || !session.active) return;
+      const expected = session.sequence[session.index];
+      showDictationPanel(`${t('dictationPrompt')} ${expected.toUpperCase()}\n${t('dictationListening')} ${session.index + 1}/${session.sequence.length}`);
+      window.speechSynthesis.cancel();
+      speakLetter(expected, 0.82);
+      session.awaiting = true;
+      session.waitTimer = setTimeout(() => completeDictationAttempt({ heard: '', score: 0, pass: false }), 2500);
+    }
+    function startDictationSession(){
+      const clickedSet = new Set(basicClickedSequence);
+      const allSettled = settledLetters.map(o => o.ch);
+      const seq = allSettled.filter(ch => !clickedSet.has(ch));
+      if (!seq.length) {
+        showDictationPanel(t('allCorrect'));
+        window.speechSynthesis.cancel();
+        speakLetter(t('allCorrect'), 0.9, uiLanguageSel.value === 'en' ? 'en-US' : 'zh-CN');
+        return;
+      }
+      if (!SpeechRecognitionCtor) {
+        showDictationPanel(t('dictationFallback'));
+        playSequenceOnly();
+        return;
+      }
+      stopDictationSession();
+      stopVoiceInput();
+      showDictationPanel(`${t('dictationTitle')}\n${t('dictationListening')}...`);
+      setDictationButtonUI(true);
+      ensureMicPermission().then(granted => {
+        if (!granted) {
+          showDictationPanel(t('dictationMicError'));
+          setDictationButtonUI(false);
+          playSequenceOnly();
+          return;
+        }
+        launchDictationRecognition(seq);
+      });
+    }
+    function launchDictationRecognition(seq){
+      dictationSession = {
+        active: true,
+        awaiting: false,
+        index: 0,
+        totalScore: 0,
+        passCount: 0,
+        sequence: seq,
+        results: [],
+        waitTimer: 0,
+        stepTimer: 0,
+        recognition: null
+      };
+      if (running && gameMode === 'basic') syncBasicLetterSpeech(true);
+      const recognition = new SpeechRecognitionCtor();
+      recognition.lang = voiceLangSel.value || 'en-US';
+      recognition.interimResults = false;
+      recognition.continuous = true;
+      recognition.maxAlternatives = 5;
+      recognition.onresult = (event) => {
+        if (!dictationSession?.active || !dictationSession.awaiting) return;
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const result = event.results[i];
+          if (!result.isFinal) continue;
+          const alternatives = [];
+          for (let j = 0; j < result.length; j++) {
+            alternatives.push({
+              transcript: result[j].transcript,
+              confidence: result[j].confidence
+            });
+          }
+          completeDictationAttempt(scorePronunciation(dictationSession.sequence[dictationSession.index], alternatives));
+          return;
+        }
+      };
+      recognition.onerror = (event) => {
+        if (!dictationSession?.active) return;
+        if (['audio-capture', 'not-allowed', 'service-not-allowed'].includes(event.error)) {
+          stopDictationSession(t('dictationMicError'));
+          playSequenceOnly();
+        }
+      };
+      recognition.onend = () => {
+        if (!dictationSession?.active) return;
+        try { recognition.start(); } catch {}
+      };
+      dictationSession.recognition = recognition;
+      try { recognition.start(); } catch {}
+      dictationSession.stepTimer = setTimeout(runDictationStep, 260);
+    }
+
+    function endGame(reason){
+      stopDictationSession('', false);
+      stopVoiceInput();
+      if (recorder && recorder.state !== 'inactive') {
+        try { recorder.stop(); } catch {}
+      }
+      running = false;
+      clearAllLetters();
+      setGameToggleUI(false);
+      applyInputModeUI();
+      overStats.innerHTML = `${t('reason')}：<b>${reason}</b><br>${t('score')}：<b>${score}</b>　${t('level')}：<b>${level}</b><br>${t('combo')}：<b>${maxComboSeen}</b>　${t('mistakes')}：<b>${streakBad}</b>`;
+      maybeSaveTopScore(score);
+      gameOver.classList.add('show');
+    }
+    function resetGameState(){
+      clearAllLetters();
+      recentlyFallen = [];
+      score = 0; combo = 0; streakBad = 0; level = 1; elapsed = 0; spawnTimer = 0; maxComboSeen = 0;
+      basicNextIndex = 0;
+      basicClickedSequence = [];
+      hpMax = Math.max(1, Math.min(20, Number(hpMaxInput.value) || 10));
+      hp = hpMax;
+      clearKeyClasses();
+      updateHUD();
+    }
+    function startGame(){
+      gameMode = 'normal';
+      gameOver.classList.remove('show');
+      stopDictationSession('', false);
+      resetGameState();
+      running = true;
+      setGameToggleUI(true);
+      applyInputModeUI();
+      if (isVoiceMode()) startVoiceInput(); else focusBestInput();
+    }
+    function startBasicMode(){
+      gameMode = 'basic';
+      gameOver.classList.remove('show');
+      stopDictationSession('', false);
+      resetGameState();
+      running = true;
+      setGameToggleUI(true);
+      applyInputModeUI();
+      if (isVoiceMode()) startVoiceInput(); else focusBestInput();
+      spawnNextBasicLetter();
+    }
+    function stopGame(){ if (running) endGame(t('manualEnd')); }
+
+    function processLetterKey(rawKey){
+      const key = (rawKey || '').toLowerCase();
+      if (key.length !== 1 || key < 'a' || key > 'z') return;
+      const keyEl = keyEls.get(key);
+      if (keyEl) {
+        keyEl.classList.add('pressed');
+        setTimeout(() => keyEl.classList.remove('pressed'), 120);
+      }
+      if (!running) return;
+      if (isBasicDictationPaused()) return;
+      const candidates = letters.filter(obj => obj.alive && obj.ch === key);
+      if (candidates.length) {
+        candidates.sort((a,b) => b.y - a.y);
+        onCorrect(key, candidates[0]);
+      } else if (isVoiceMode()) {
+        const idx = recentlyFallen.findIndex(r => r.ch === key);
+        if (idx !== -1) {
+          recentlyFallen.splice(idx, 1);
+          combo += 1; streakBad = 0;
+          score += 10 + Math.min(20, combo);
+          maxComboSeen = Math.max(maxComboSeen, combo);
+          playWater();
+          window.speechSynthesis.cancel();
+          speakLetter(key);
+          updateHUD();
+        }
+      } else if (gameMode !== 'basic') {
+        penalize(t('wrongKey'));
+      }
+    }
+    function onKeyDown(e){ if (!e.repeat) processLetterKey(e.key); }
+    window.addEventListener('keydown', onKeyDown);
+    mobileInput.addEventListener('input', (e) => {
+      const v = e.target.value.trim();
+      if (v) processLetterKey(v.slice(-1));
+      e.target.value = '';
+    });
+    mobileInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
+    function focusBestInput(){ if (isVoiceMode()) { game.focus(); return; } if (isTouchLike()) mobileInput.focus({ preventScroll: true }); else game.focus(); }
+
+    function tick(t0){
+      const dt = Math.min(0.033, (t0 - lastT) / 1000);
+      lastT = t0;
+      if (running) {
+        if (!isBasicDictationPaused()) {
+          elapsed += dt;
+          if (gameMode === 'normal') {
+            const newLevel = 1 + Math.floor(elapsed / levelEverySec());
+            if (newLevel !== level) { level = newLevel; updateHUD(); }
+          }
+          spawnTimer += dt * 1000;
+          const interval = currentSpawnInterval();
+          while (spawnTimer >= interval) {
+            spawnTimer -= interval;
+            if (gameMode === 'normal') spawnLetter();
+          }
+          const bounds = getGameBounds();
+          const voiceBasicTick = gameMode === 'basic' && isVoiceMode();
+          const deathLine = voiceBasicTick
+            ? game.clientHeight - 40
+            : Math.max(bounds.topBlocked + 120, game.clientHeight - bounds.bottomBlocked + 10);
+          for (const obj of [...letters]) {
+            if (!obj.alive) continue;
+            obj.y += obj.vy * dt;
+            obj.el.style.top = `${obj.y}px`;
+            if (obj.y > deathLine) {
+              if (gameMode === 'basic' && obj.basic) {
+                settleBasicLetter(obj);
+              } else {
+                removeLetter(obj);
+                letters = letters.filter(x => x !== obj);
+                if (isVoiceMode()) {
+                  recentlyFallen.push({ ch: obj.ch, time: performance.now() });
+                } else {
+                  penalize(t('missed'));
+                  if (!running) break;
+                }
+              }
+            }
+          }
+          letters = letters.filter(obj => obj.alive);
+          const now = performance.now();
+          const expired = recentlyFallen.filter(r => now - r.time > 3000);
+          expired.forEach(() => { penalize(t('missed')); });
+          recentlyFallen = recentlyFallen.filter(r => now - r.time <= 3000);
+          if (!running) { recentlyFallen = []; }
+        }
+        renderKeyboardHighlights();
+      }
+      requestAnimationFrame(tick);
+    }
+
+    function updateUILanguage(){
+      document.documentElement.lang = uiLanguageSel.value === 'en' ? 'en' : 'zh-CN';
+      basicModeBtn.textContent = t('basic');
+      dictationTitle.textContent = t('dictationTitle');
+      if (!dictationPanel.classList.contains('show')) dictationBody.textContent = t('dictationReady');
+      settingsBtn.textContent = t('settings');
+      closeSettingsBtn.textContent = t('close');
+      restartBtn.textContent = t('restart');
+      closeOverBtn.textContent = t('close');
+      $('settingsTitle').textContent = t('settings');
+      $('leaderboardTitle').textContent = t('leaderboardTitle');
+      $('labelScore').textContent = t('score');
+      $('labelHp').textContent = t('hp');
+      $('labelCombo').textContent = t('combo');
+      $('labelMistakes').textContent = t('mistakes');
+      $('labelLevel').textContent = t('level');
+      $('labelRec').textContent = t('rec');
+      $('labelBaseSpeed').textContent = t('baseSpeed');
+      $('labelBaseSpawn').textContent = t('baseSpawn');
+      $('labelMaxLetters').textContent = t('maxLetters');
+      $('labelHpMax').textContent = t('hpMax');
+      $('labelLevelEvery').textContent = t('levelEvery');
+      $('labelVoiceLang').textContent = t('voiceLang');
+      $('labelVoiceDuration').textContent = t('voiceDuration');
+      $('labelUiLanguage').textContent = t('uiLanguage');
+      $('labelInputMode').textContent = t('inputMode');
+      inputModeSel.options[0].textContent = t('inputKeyboard');
+      inputModeSel.options[1].textContent = t('inputVoice');
+      if (!SpeechRecognitionCtor) inputModeSel.options[1].disabled = true;
+      $('settingsNote').textContent = t('settingsNote');
+      $('clearLeaderboardBtn').textContent = t('clearLeaderboard');
+      $('mobileHint').textContent = t('mobileHint');
+      $('mobileInput').placeholder = t('mobilePlaceholder');
+      $('tapTitle').textContent = t('tapTitle');
+      $('tapBody').textContent = t('tapBody');
+      $('gameOverTitle').textContent = t('gameOver');
+      setGameToggleUI(running);
+      setRecUI(!!(recorder && recorder.state !== 'inactive'));
+      setDictationButtonUI(!!dictationSession?.active);
+      renderLeaderboard();
+    }
+
+    settingsBtn.addEventListener('click', () => settings.classList.toggle('show'));
+    closeSettingsBtn.addEventListener('click', () => settings.classList.remove('show'));
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') settings.classList.remove('show'); });
+    document.addEventListener('pointerdown', (e) => {
+      if (!settings.classList.contains('show')) return;
+      if (settings.contains(e.target) || settingsBtn.contains(e.target)) return;
+      settings.classList.remove('show');
+    });
+    basicModeBtn.addEventListener('click', startBasicMode);
+    advancedModeBtn.addEventListener('click', () => { if (dictationSession?.active) stopDictationSession(t('dictationStopped')); else startDictationSession(); });
+    startGameBtn.addEventListener('click', () => { if (running) stopGame(); else startGame(); });
+    startRecBtn.addEventListener('click', () => { if (recorder && recorder.state !== 'inactive') stopRecording(); else startRecording(); });
+    restartBtn.addEventListener('click', () => { if (gameMode === 'basic') startBasicMode(); else startGame(); });
+    closeOverBtn.addEventListener('click', () => gameOver.classList.remove('show'));
+    hpMaxInput.addEventListener('change', () => { hpMax = Number(hpMaxInput.value) || 5; hp = Math.min(hp, hpMax); updateHUD(); });
+    uiLanguageSel.addEventListener('change', updateUILanguage);
+    inputModeSel.addEventListener('change', () => {
+      applyInputModeUI();
+      if (running) {
+        if (isVoiceMode()) { stopVoiceInput(); startVoiceInput(); }
+        else { stopVoiceInput(); focusBestInput(); }
+      }
+    });
+    clearLeaderboardBtn.addEventListener('click', () => {
+      try { localStorage.removeItem(SCORE_STORAGE_KEY); } catch {}
+      latestSavedRecordKey = null;
+      renderLeaderboard();
+    });
+
+    function unlockOnce(){
+      ensureAudio();
+      tapToEnable.classList.add('hide');
+      focusBestInput();
+      window.removeEventListener('pointerdown', unlockOnce);
+      window.removeEventListener('keydown', unlockOnce);
+    }
+    window.addEventListener('pointerdown', unlockOnce, { once: false });
+    window.addEventListener('keydown', unlockOnce, { once: false });
+    window.addEventListener('orientationchange', () => setTimeout(() => { focusBestInput(); repositionSettledLetters(); }, 300));
+    window.addEventListener('resize', () => repositionSettledLetters());
+
+    function runSelfChecks(){
+      console.assert(formatTimestamp(new Date('2026-03-09T07:08:09').getTime()).includes('2026-03-09'), 'formatTimestamp failed');
+      console.assert(Array.isArray(loadTopScores()), 'loadTopScores should return array');
+      console.assert(typeof computeSettledPosition(0).x === 'number', 'computeSettledPosition failed');
+    }
+    runSelfChecks();
+
+    updateHUD();
+    updateUILanguage();
+    renderLeaderboard();
+    setTimeout(announceLeaderboard, 400);
+    setRecUI(false);
+    setGameToggleUI(false);
+    setDictationButtonUI(false);
+    requestAnimationFrame((t0) => { lastT = t0; requestAnimationFrame(tick); });
+  })();
+  </script>
+</body>
+</html>
