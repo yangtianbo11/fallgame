@@ -78,6 +78,8 @@
     .btn.primary{border-color:rgba(122,167,255,.55);background:rgba(122,167,255,.15)}
     .btn.danger{border-color:rgba(255,122,156,.45);background:rgba(255,122,156,.12)}
     .btn:disabled{opacity:.45;cursor:not-allowed}
+    #pauseOverlay{position:absolute;inset:0;z-index:50;background:rgba(0,0,0,.45);display:none;justify-content:center;align-items:center;font-size:clamp(28px,6vw,56px);font-weight:900;color:rgba(255,255,255,.7);letter-spacing:4px;pointer-events:none}
+    #pauseOverlay.show{display:flex}
 
     #settings{
       position:absolute;right:var(--safe-right);top:calc(var(--safe-top) + 64px);z-index:60;display:none;
@@ -165,7 +167,7 @@
       #kbdWrap{width:min(98vw,380px);padding:8px;bottom:calc(var(--safe-bottom) + 86px)}
       .kbdRow{gap:4px}
       #mobileInputWrap{bottom:calc(var(--safe-bottom) + 210px);width:min(92vw,360px);z-index:54}
-      #basicModeBtn,#advancedModeBtn,#startGameBtn,#startRecBtn,#settingsBtn{display:block!important;visibility:visible!important;opacity:1!important}
+      #basicModeBtn,#advancedModeBtn,#startGameBtn,#startRecBtn,#settingsBtn,#inputModeBtn{display:block!important;visibility:visible!important;opacity:1!important}
     }
   </style>
 </head>
@@ -193,6 +195,7 @@
       <button class="btn primary" id="startGameBtn">开始游戏</button>
       <button class="btn" id="startRecBtn">开始录音</button>
       <button class="btn" id="settingsBtn">设置</button>
+      <button class="btn" id="inputModeBtn">🎤</button>
     </div>
 
     <div id="dictationPanel" aria-live="polite">
@@ -212,7 +215,6 @@
       <div class="row"><label for="levelEvery" id="labelLevelEvery">难度升级速度(秒)</label><input id="levelEvery" type="number" min="5" max="60" step="1" value="12" /></div>
       <div class="row"><label for="voiceLang" id="labelVoiceLang">发音语言</label><select id="voiceLang"><option value="en-US">英语(美)</option><option value="en-GB">英语(英)</option><option value="en-AU">英语(澳)</option></select></div>
       <div class="row"><label for="voiceDuration" id="labelVoiceDuration">发音时长倍率</label><input id="voiceDuration" type="range" min="1" max="4" step="0.5" value="2.5" /></div>
-      <div class="row"><label for="inputMode" id="labelInputMode">输入方式</label><select id="inputMode"><option value="keyboard">键盘输入</option><option value="voice" selected>语音输入</option></select></div>
       <div class="small" id="settingsNote">手机和平板可直接点输入框调出系统键盘。录屏优先尝试 MP4；若浏览器不支持，会自动保存为 WebM。</div>
       <div class="row"><button class="btn danger" id="clearLeaderboardBtn" style="width:100%;">清空排行榜</button></div>
       <div class="row"><label for="uiLanguage" id="labelUiLanguage">界面语言</label><select id="uiLanguage"><option value="zh-CN">中文</option><option value="en">English</option></select></div>
@@ -232,6 +234,7 @@
     </div>
 
     <div id="tapToEnable"><strong id="tapTitle">点一下启用音效/发音</strong><div class="small" id="tapBody">手机、平板、笔记本都需要先点击一次页面，浏览器才允许播放音效与语音。</div></div>
+    <div id="pauseOverlay">⏸ PAUSED</div>
     <div id="ground"></div>
 
     <div id="gameOver">
@@ -262,7 +265,7 @@
         noClickedLetters:'还没有记录到点击字母', allCorrect:'全部正确，无需听写！', noScreenRecord:'当前设备或浏览器不支持网页内录屏。', recordStartFail:'录像启动失败：你可能取消了共享，或当前浏览器限制了录屏。',
         leaderboardIntro:'当前浏览器保存的最高分排行榜如下。', rank:'第', place:'名', time:'时间',
         dictationTitle:'AI语音评分', dictationReady:'完成基础模式后，点击“听写”开始评分。', dictationPrompt:'请跟读', dictationListening:'识别中', dictationMissed:'未识别', dictationResult:'评分结果', dictationStopped:'听写已停止', dictationFallback:'当前浏览器不支持语音评分，已切换为仅朗读听写。', dictationMicError:'麦克风不可用，已切换为仅朗读听写。',         dictationAverage:'平均分', dictationPassRate:'达标率', dictationHeard:'识别', allPassed:'🎉 全部过关！', dictationRemaining:'剩余未过关',
-        inputMode:'输入方式', inputKeyboard:'键盘输入', inputVoice:'语音输入', micListening:'语音输入中', micError:'语音不可用', voiceNotSupported:'当前浏览器不支持语音输入'
+        paused:'⏸ 已暂停', inputMode:'输入方式', inputKeyboard:'键盘输入', inputVoice:'语音输入', micListening:'语音输入中', micError:'语音不可用', voiceNotSupported:'当前浏览器不支持语音输入'
       },
       en: {
         basic:'Basic', advanced:'Dictation', stopDictation:'Stop Dictation', startGame:'Start Game', endGame:'End Game', startRec:'Start Recording', stopRec:'Stop Recording', settings:'Settings', close:'Close', restart:'Restart',
@@ -276,7 +279,7 @@
         noClickedLetters:'No clicked letters recorded yet', allCorrect:'All correct, no dictation needed!', noScreenRecord:'This device or browser does not support in-page screen recording.', recordStartFail:'Recording failed to start. You may have canceled sharing, or recording is restricted by the browser.',
         leaderboardIntro:'Top scores saved in this browser are as follows.', rank:'#', place:'', time:'Time',
         dictationTitle:'AI Pronunciation Score', dictationReady:'Finish basic mode, then tap Dictation to start scoring.', dictationPrompt:'Repeat', dictationListening:'Listening', dictationMissed:'No result', dictationResult:'Score', dictationStopped:'Dictation stopped.', dictationFallback:'Speech scoring is unavailable in this browser, so playback-only dictation is used instead.', dictationMicError:'Microphone is unavailable, so playback-only dictation is used instead.',         dictationAverage:'Average', dictationPassRate:'Pass rate', dictationHeard:'Heard', allPassed:'🎉 All passed!', dictationRemaining:'Remaining',
-        inputMode:'Input mode', inputKeyboard:'Keyboard', inputVoice:'Voice', micListening:'Voice input active', micError:'Voice unavailable', voiceNotSupported:'Voice input is not supported in this browser'
+        paused:'⏸ PAUSED', inputMode:'Input mode', inputKeyboard:'Keyboard', inputVoice:'Voice', micListening:'Voice input active', micError:'Voice unavailable', voiceNotSupported:'Voice input is not supported in this browser'
       }
     };
 
@@ -316,7 +319,9 @@
     const voiceLangSel = $('voiceLang');
     const voiceDurationRange = $('voiceDuration');
     const uiLanguageSel = $('uiLanguage');
-    const inputModeSel = $('inputMode');
+    const inputModeBtn = $('inputModeBtn');
+    const pauseOverlay = $('pauseOverlay');
+    let currentInputMode = 'voice';
     const micStatus = $('micStatus');
     const micLabel = $('micLabel');
     const tapToEnable = $('tapToEnable');
@@ -654,7 +659,7 @@
       }
     }
 
-    function isVoiceMode(){ return inputModeSel.value === 'voice'; }
+    function isVoiceMode(){ return currentInputMode === 'voice'; }
     let voiceRecognition = null;
     let voiceInputActive = false;
     function setMicUI(state){
@@ -680,7 +685,8 @@
       if (voiceInputActive) return;
       if (!SpeechRecognitionCtor) {
         alert(t('voiceNotSupported'));
-        inputModeSel.value = 'keyboard';
+        currentInputMode = 'keyboard';
+        updateInputModeBtn();
         return;
       }
       if (dictationSession?.active) return;
@@ -725,7 +731,8 @@
         if (['not-allowed','service-not-allowed','audio-capture'].includes(event.error)) {
           permissionDenied = true;
           stopVoiceInput();
-          inputModeSel.value = 'keyboard';
+          currentInputMode = 'keyboard';
+          updateInputModeBtn();
           applyInputModeUI();
           if (running) focusBestInput();
           return;
@@ -756,6 +763,7 @@
     let lastT = performance.now();
     let spawnTimer = 0;
     let running = false;
+    let paused = false;
     let gameMode = 'normal';
     let score = 0;
     let combo = 0;
@@ -1215,6 +1223,8 @@
       gameOver.classList.add('show');
     }
     function resetGameState(){
+      paused = false;
+      pauseOverlay.classList.remove('show');
       clearAllLetters();
       recentlyFallen = [];
       score = 0; combo = 0; streakBad = 0; level = 1; elapsed = 0; spawnTimer = 0; maxComboSeen = 0;
@@ -1247,6 +1257,21 @@
       spawnNextBasicLetter();
     }
     function stopGame(){ if (running) endGame(t('manualEnd')); }
+    function togglePause(){
+      if (!running) return;
+      paused = !paused;
+      pauseOverlay.textContent = t('paused');
+      pauseOverlay.classList.toggle('show', paused);
+      if (paused) {
+        window.speechSynthesis.cancel();
+        letters.forEach(obj => { if (obj.basic) clearBasicSpeechTimers(obj); });
+        if (isVoiceMode()) stopVoiceInput();
+      } else {
+        lastT = performance.now();
+        letters.forEach(obj => { if (obj.basic && obj.alive && !obj.clicked && !obj.settled) scheduleBasicSpeech(obj); });
+        if (isVoiceMode()) startVoiceInput();
+      }
+    }
 
     function processLetterKey(rawKey){
       const key = (rawKey || '').toLowerCase();
@@ -1291,7 +1316,7 @@
     function tick(t0){
       const dt = Math.min(0.033, (t0 - lastT) / 1000);
       lastT = t0;
-      if (running) {
+      if (running && !paused) {
         if (!isBasicDictationPaused()) {
           elapsed += dt;
           if (gameMode === 'normal') {
@@ -1365,10 +1390,7 @@
       $('labelVoiceLang').textContent = t('voiceLang');
       $('labelVoiceDuration').textContent = t('voiceDuration');
       $('labelUiLanguage').textContent = t('uiLanguage');
-      $('labelInputMode').textContent = t('inputMode');
-      inputModeSel.options[0].textContent = t('inputKeyboard');
-      inputModeSel.options[1].textContent = t('inputVoice');
-      if (!SpeechRecognitionCtor) inputModeSel.options[1].disabled = true;
+      updateInputModeBtn();
       $('settingsNote').textContent = t('settingsNote');
       $('clearLeaderboardBtn').textContent = t('clearLeaderboard');
       $('mobileHint').textContent = t('mobileHint');
@@ -1398,13 +1420,23 @@
     closeOverBtn.addEventListener('click', () => gameOver.classList.remove('show'));
     hpMaxInput.addEventListener('change', () => { hpMax = Number(hpMaxInput.value) || 5; hp = Math.min(hp, hpMax); updateHUD(); });
     uiLanguageSel.addEventListener('change', updateUILanguage);
-    inputModeSel.addEventListener('change', () => {
+    function updateInputModeBtn(){
+      inputModeBtn.textContent = isVoiceMode() ? '🎤' : '⌨️';
+    }
+    function toggleInputMode(){
+      currentInputMode = isVoiceMode() ? 'keyboard' : 'voice';
+      if (currentInputMode === 'voice' && !SpeechRecognitionCtor) {
+        alert(t('voiceNotSupported'));
+        currentInputMode = 'keyboard';
+      }
+      updateInputModeBtn();
       applyInputModeUI();
       if (running) {
         if (isVoiceMode()) { stopVoiceInput(); startVoiceInput(); }
         else { stopVoiceInput(); focusBestInput(); }
       }
-    });
+    }
+    inputModeBtn.addEventListener('click', toggleInputMode);
     clearLeaderboardBtn.addEventListener('click', () => {
       try { localStorage.removeItem(SCORE_STORAGE_KEY); } catch {}
       latestSavedRecordKey = null;
@@ -1420,6 +1452,12 @@
     }
     window.addEventListener('pointerdown', unlockOnce, { once: false });
     window.addEventListener('keydown', unlockOnce, { once: false });
+    game.addEventListener('click', (e) => {
+      if (!running) return;
+      const interactive = e.target.closest('button, input, select, a, #controlBar, #settings, #hud, #leaderboard, #dictationPanel, #gameOver, #mobileInputWrap, #tapToEnable, #kbdWrap, #micStatus');
+      if (interactive) return;
+      togglePause();
+    });
     window.addEventListener('orientationchange', () => setTimeout(() => { focusBestInput(); repositionSettledLetters(); }, 300));
     window.addEventListener('resize', () => repositionSettledLetters());
 
