@@ -509,9 +509,11 @@
     }
     const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition || null;
 
+    const AZURE_DEFAULT_KEY = atob('RkpKUUxuTHNMbjZWbWExbmxKMXFPNVFxbGhMYWEzZ2IwZU03TEFhTFpBelN2MGx4cEJtbUpRUUo5OUNDQUMzcEthUlhKM3czQUFBWUFDT0dWWTBl');
+    const AZURE_DEFAULT_REGION = 'eastasia';
     function getAzureConfig(){
-      const key = $('azureKey')?.value?.trim();
-      const region = $('azureRegion')?.value?.trim() || 'eastasia';
+      const key = ($('azureKey')?.value?.trim()) || AZURE_DEFAULT_KEY;
+      const region = ($('azureRegion')?.value?.trim()) || AZURE_DEFAULT_REGION;
       return (key && typeof SpeechSDK !== 'undefined') ? { key, region } : null;
     }
     function canDoSpeech(){ return !!SpeechRecognitionCtor || !!getAzureConfig(); }
