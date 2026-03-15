@@ -387,9 +387,18 @@
       if (audioCtx.state === 'suspended') audioCtx.resume();
       if (!audioUnlocked) {
         try {
-          const u = new SpeechSynthesisUtterance('');
-          u.volume = 0;
+          const buf = audioCtx.createBuffer(1, 1, 22050);
+          const src = audioCtx.createBufferSource();
+          src.buffer = buf;
+          src.connect(audioCtx.destination);
+          src.start(0);
+        } catch {}
+        try {
+          window.speechSynthesis.cancel();
+          const u = new SpeechSynthesisUtterance('.');
+          u.volume = 0.01;
           u.rate = 10;
+          u.lang = 'en-US';
           window.speechSynthesis.speak(u);
         } catch {}
       }
@@ -449,6 +458,8 @@
     }
     function speakLetter(text, rateOverride = null, langOverride = null){
       try{
+        if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+        window.speechSynthesis.cancel();
         const multiplier = Math.max(1, Number(voiceDurationRange.value) || 2);
         const u = new SpeechSynthesisUtterance(text);
         u.lang = langOverride || voiceLangSel.value || 'en-US';
@@ -1547,15 +1558,10 @@
       ensureAudio();
       tapToEnable.classList.add('hide');
       focusBestInput();
-      window.removeEventListener('pointerdown', unlockOnce);
-      window.removeEventListener('keydown', unlockOnce);
-      window.removeEventListener('touchstart', unlockOnce);
-      window.removeEventListener('click', unlockOnce);
+      ['pointerdown','keydown','touchstart','touchend','click'].forEach(ev => window.removeEventListener(ev, unlockOnce));
     }
-    window.addEventListener('pointerdown', unlockOnce, { once: false });
-    window.addEventListener('keydown', unlockOnce, { once: false });
-    window.addEventListener('touchstart', unlockOnce, { once: false });
-    window.addEventListener('click', unlockOnce, { once: false });
+    ['pointerdown','keydown','touchstart','touchend','click'].forEach(ev => window.addEventListener(ev, unlockOnce, { once: false }));
+    document.querySelectorAll('.btn').forEach(btn => btn.addEventListener('click', () => { if (!audioUnlocked) ensureAudio(); }, true));
     game.addEventListener('click', (e) => {
       if (!running) return;
       const interactive = e.target.closest('button, input, select, a, #controlBar, #settings, #hud, #leaderboard, #dictationPanel, #gameOver, #mobileInputWrap, #tapToEnable, #kbdWrap, #micStatus');
