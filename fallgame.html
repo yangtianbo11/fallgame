@@ -4,7 +4,23 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
   <title>字母掉落小游戏（全端适配）</title>
-  <script src="https://cdn.jsdelivr.net/npm/microsoft-cognitiveservices-speech-sdk@latest/distrib/browser/microsoft.cognitiveservices.speech.sdk.bundle-min.js"></script>
+  <script>
+    var _sdkUrls = [
+      'https://cdn.jsdelivr.net/npm/microsoft-cognitiveservices-speech-sdk@latest/distrib/browser/microsoft.cognitiveservices.speech.sdk.bundle-min.js',
+      'https://unpkg.com/microsoft-cognitiveservices-speech-sdk@latest/distrib/browser/microsoft.cognitiveservices.speech.sdk.bundle-min.js',
+      'https://registry.npmmirror.com/microsoft-cognitiveservices-speech-sdk/latest/files/distrib/browser/microsoft.cognitiveservices.speech.sdk.bundle-min.js'
+    ];
+    var _sdkIdx = 0;
+    function _loadSdk(){
+      if(_sdkIdx >= _sdkUrls.length){ console.warn('All Speech SDK CDNs failed'); return; }
+      var s = document.createElement('script');
+      s.src = _sdkUrls[_sdkIdx];
+      s.onload = function(){ console.log('Speech SDK loaded from: ' + _sdkUrls[_sdkIdx]); };
+      s.onerror = function(){ console.warn('SDK CDN failed: ' + _sdkUrls[_sdkIdx]); _sdkIdx++; _loadSdk(); };
+      document.head.appendChild(s);
+    }
+    _loadSdk();
+  </script>
   <style>
     :root{
       --bg:#0b1020;
@@ -759,16 +775,31 @@
     }
     async function ensureMicPermission(){
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach(t => t.stop());
-        return true;
-      } catch { return false; }
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          stream.getTracks().forEach(t => t.stop());
+          return true;
+        }
+        if (navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia) {
+          const legacy = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
+          return await new Promise(resolve => {
+            legacy.call(navigator, { audio: true },
+              stream => { stream.getTracks().forEach(t => t.stop()); resolve(true); },
+              () => resolve(false));
+          });
+        }
+        console.warn('No getUserMedia API available');
+        return false;
+      } catch(e) { console.warn('Mic permission error:', e); return false; }
     }
     let azureRecognizer = null;
     function startVoiceInput(){
       if (voiceInputActive) return;
-      if (!canDoSpeech()) {
-        alert(t('voiceNotSupported'));
+      const hasSR = !!SpeechRecognitionCtor;
+      const hasAzure = !!getAzureConfig();
+      if (!hasSR && !hasAzure) {
+        const reason = (typeof SpeechSDK === 'undefined') ? '语音SDK未加载，请检查网络' : '无可用语音引擎';
+        alert(reason);
         currentInputMode = 'keyboard';
         updateInputModeBtn();
         return;
@@ -780,6 +811,7 @@
         if (!granted || !voiceInputActive) {
           voiceInputActive = false;
           setMicUI('error');
+          alert('麦克风权限被拒绝，请在浏览器设置中允许使用麦克风');
           return;
         }
         if (SpeechRecognitionCtor) launchRecognitionNative();
@@ -836,7 +868,11 @@
     function launchRecognitionAzure(){
       try {
         const recognizer = createAzureRecognizer(voiceLangSel.value || 'en-US');
-        if (!recognizer) { setMicUI('error'); voiceInputActive = false; return; }
+        if (!recognizer) {
+          setMicUI('error'); voiceInputActive = false;
+          alert('Azure语音引擎初始化失败');
+          return;
+        }
         azureRecognizer = recognizer;
         recognizer.recognized = (s, e) => {
           if (!voiceInputActive) return;
@@ -846,14 +882,15 @@
         };
         recognizer.canceled = (s, e) => {
           if (e.reason === SpeechSDK.CancellationReason.Error) {
+            console.warn('Azure recognition error:', e.errorDetails);
             setMicUI('error');
           }
         };
         recognizer.startContinuousRecognitionAsync(
           () => setMicUI('listening'),
-          () => { setMicUI('error'); voiceInputActive = false; }
+          (err) => { console.warn('Azure start failed:', err); setMicUI('error'); voiceInputActive = false; }
         );
-      } catch { setMicUI('error'); voiceInputActive = false; }
+      } catch(e) { console.warn('Azure launch error:', e); setMicUI('error'); voiceInputActive = false; }
     }
     function stopVoiceInput(){
       voiceInputActive = false;
@@ -1258,7 +1295,8 @@
         return;
       }
       if (!canDoSpeech()) {
-        showDictationPanel(t('dictationFallback'));
+        const reason = (typeof SpeechSDK === 'undefined') ? '语音SDK未加载，请检查网络后刷新页面' : t('dictationFallback');
+        showDictationPanel(reason);
         playSequenceOnly();
         return;
       }
