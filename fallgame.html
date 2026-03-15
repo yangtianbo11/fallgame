@@ -539,8 +539,35 @@
       if (!cfg) return null;
       const speechConfig = SpeechSDK.SpeechConfig.fromSubscription(cfg.key, cfg.region);
       speechConfig.speechRecognitionLanguage = lang || 'en-US';
+      speechConfig.outputFormat = SpeechSDK.OutputFormat.Detailed;
       const audioConfig = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
       return new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
+    }
+    function extractAzureNBest(result){
+      try {
+        const json = result.properties.getProperty(SpeechSDK.PropertyId.SpeechServiceResponse_JsonResult);
+        if (!json) return [{ transcript: result.text || '', confidence: 0.8 }];
+        const parsed = JSON.parse(json);
+        const nbest = parsed.NBest || [];
+        if (!nbest.length) return [{ transcript: result.text || '', confidence: 0.8 }];
+        return nbest.map(n => ({ transcript: n.Display || n.Lexical || '', confidence: n.Confidence || 0 }));
+      } catch {
+        return [{ transcript: result.text || '', confidence: 0.8 }];
+      }
+    }
+    function bestLetterFromAlternatives(alternatives){
+      let bestLetter = '';
+      let bestScore = 0;
+      for (let i = 0; i < alternatives.length; i++) {
+        const alt = alternatives[i];
+        const letter = transcriptToLetter(alt.transcript);
+        if (letter) {
+          const conf = Number.isFinite(alt.confidence) ? alt.confidence : 0.5;
+          const score = conf + (i === 0 ? 0.1 : 0);
+          if (score > bestScore) { bestScore = score; bestLetter = letter; }
+        }
+      }
+      return bestLetter;
     }
 
     const LETTER_ALIASES = {
@@ -833,17 +860,12 @@
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const result = event.results[i];
           if (!result.isFinal) continue;
-          let bestLetter = '';
-          let bestScore = 0;
+          const alts = [];
           for (let j = 0; j < result.length; j++) {
-            const letter = transcriptToLetter(result[j].transcript);
-            if (letter) {
-              const conf = Number.isFinite(result[j].confidence) ? result[j].confidence : 0.5;
-              const score = conf + (j === 0 ? 0.1 : 0);
-              if (score > bestScore) { bestScore = score; bestLetter = letter; }
-            }
+            alts.push({ transcript: result[j].transcript, confidence: result[j].confidence });
           }
-          if (bestLetter) processLetterKey(bestLetter);
+          const letter = bestLetterFromAlternatives(alts);
+          if (letter) processLetterKey(letter);
         }
       };
       let permissionDenied = false;
@@ -877,7 +899,9 @@
         recognizer.recognized = (s, e) => {
           if (!voiceInputActive) return;
           if (e.result.reason === SpeechSDK.ResultReason.RecognizedSpeech) {
-            processVoiceTranscript(e.result.text);
+            const alts = extractAzureNBest(e.result);
+            const letter = bestLetterFromAlternatives(alts);
+            if (letter) processLetterKey(letter);
           }
         };
         recognizer.canceled = (s, e) => {
@@ -1336,9 +1360,8 @@
       }
       dictationSession.stepTimer = setTimeout(runDictationStep, 260);
     }
-    function handleDictationResult(transcript, confidence){
+    function handleDictationResult(alternatives){
       if (!dictationSession?.active || !dictationSession.awaiting) return;
-      const alternatives = [{ transcript, confidence: confidence ?? 0.8 }];
       completeDictationAttempt(scorePronunciation(dictationSession.sequence[dictationSession.index], alternatives));
     }
     function launchDictationNative(){
@@ -1356,7 +1379,7 @@
           for (let j = 0; j < result.length; j++) {
             alternatives.push({ transcript: result[j].transcript, confidence: result[j].confidence });
           }
-          completeDictationAttempt(scorePronunciation(dictationSession.sequence[dictationSession.index], alternatives));
+          handleDictationResult(alternatives);
           return;
         }
       };
@@ -1381,7 +1404,8 @@
         dictationSession.azureRecognizer = recognizer;
         recognizer.recognized = (s, e) => {
           if (e.result.reason === SpeechSDK.ResultReason.RecognizedSpeech) {
-            handleDictationResult(e.result.text, 0.85);
+            const alts = extractAzureNBest(e.result);
+            handleDictationResult(alts);
           }
         };
         recognizer.canceled = (s, e) => {
