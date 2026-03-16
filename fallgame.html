@@ -553,7 +553,9 @@
         } catch {}
       }
     }
-    const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+    const _isWeChat = /MicroMessenger/i.test(navigator.userAgent);
+    const _rawSRCtor = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+    const SpeechRecognitionCtor = _isWeChat ? null : _rawSRCtor;
 
     const AZURE_DEFAULT_KEY = atob('RkpKUUxuTHNMbjZWbWExbmxKMXFPNVFxbGhMYWEzZ2IwZU03TEFhTFpBelN2MGx4cEJtbUpRUUo5OUNDQUMzcEthUlhKM3czQUFBWUFDT0dWWTBl');
     const AZURE_DEFAULT_REGION = 'eastasia';
@@ -919,7 +921,23 @@
         try { recognition.start(); } catch {}
       };
       voiceRecognition = recognition;
+      let nativeGotResult = false;
+      const origOnResult = recognition.onresult;
+      recognition.onresult = function(event){
+        nativeGotResult = true;
+        origOnResult(event);
+      };
       try { recognition.start(); setMicUI('listening'); } catch { setMicUI('error'); }
+      if (getAzureConfig()) {
+        setTimeout(() => {
+          if (voiceInputActive && !nativeGotResult && voiceRecognition === recognition) {
+            console.log('Native SR no results after 8s, switching to Azure');
+            try { recognition.onend = null; recognition.stop(); } catch {}
+            voiceRecognition = null;
+            launchRecognitionAzure();
+          }
+        }, 8000);
+      }
     }
     function launchRecognitionAzure(){
       try {
