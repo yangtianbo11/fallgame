@@ -236,7 +236,7 @@
       <div class="small" id="azureNote">Firefox/微信浏览器需填写 Azure 语音服务密钥才能使用语音输入。多个key用逗号分隔，用量接近上限时自动切换。</div>
       <div class="row"><label for="azureKey" id="labelAzureKey">Azure Key(s)</label><textarea id="azureKey" rows="2" placeholder="key1, key2, key3" style="width:140px;font-size:11px;resize:vertical"></textarea></div>
       <div class="row"><label for="azureRegion" id="labelAzureRegion">Azure 区域</label><input id="azureRegion" type="text" value="eastasia" placeholder="如 eastasia" style="width:140px" /></div>
-      <div class="row" id="azureUsageRow"><label id="labelAzureUsage">Key用量</label><span id="azureUsageInfo" style="font-size:11px;color:var(--muted)"></span></div>
+      <div class="row" id="azureUsageRow"><label id="labelAzureUsage">Key用量</label><span id="azureUsageInfo" style="font-size:11px;color:#8fa4c8">加载中...</span></div>
       <div class="small" id="settingsNote">手机和平板可直接点输入框调出系统键盘。录屏优先尝试 MP4；若浏览器不支持，会自动保存为 WebM。</div>
       <div class="row"><button class="btn danger" id="clearLeaderboardBtn" style="width:100%;">清空排行榜</button></div>
       <div class="row"><label for="uiLanguage" id="labelUiLanguage">界面语言</label><select id="uiLanguage"><option value="zh-CN">中文</option><option value="en">English</option></select></div>
@@ -1751,7 +1751,7 @@
       renderLeaderboard();
     }
 
-    settingsBtn.addEventListener('click', () => settings.classList.toggle('show'));
+    settingsBtn.addEventListener('click', () => { settings.classList.toggle('show'); _updateUsageDisplay(); });
     closeSettingsBtn.addEventListener('click', () => settings.classList.remove('show'));
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') settings.classList.remove('show'); });
     document.addEventListener('pointerdown', (e) => {
