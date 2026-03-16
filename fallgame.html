@@ -232,9 +232,10 @@
       <div class="row"><label for="levelEvery" id="labelLevelEvery">难度升级速度(秒)</label><input id="levelEvery" type="number" min="5" max="60" step="1" value="12" /></div>
       <div class="row"><label for="voiceLang" id="labelVoiceLang">发音语言</label><select id="voiceLang"><option value="en-US">英语(美)</option><option value="en-GB">英语(英)</option><option value="en-AU">英语(澳)</option></select></div>
       <div class="row"><label for="voiceDuration" id="labelVoiceDuration">发音时长倍率</label><input id="voiceDuration" type="range" min="1" max="4" step="0.5" value="2.5" /></div>
-      <div class="small" id="azureNote">Firefox/微信浏览器需填写 Azure 语音服务密钥才能使用语音输入</div>
-      <div class="row"><label for="azureKey" id="labelAzureKey">Azure Key</label><input id="azureKey" type="password" placeholder="输入 Azure Speech Key" style="width:140px" /></div>
+      <div class="small" id="azureNote">Firefox/微信浏览器需填写 Azure 语音服务密钥才能使用语音输入。多个key用逗号分隔，用量接近上限时自动切换。</div>
+      <div class="row"><label for="azureKey" id="labelAzureKey">Azure Key(s)</label><textarea id="azureKey" rows="2" placeholder="key1, key2, key3" style="width:140px;font-size:11px;resize:vertical"></textarea></div>
       <div class="row"><label for="azureRegion" id="labelAzureRegion">Azure 区域</label><input id="azureRegion" type="text" value="eastasia" placeholder="如 eastasia" style="width:140px" /></div>
+      <div class="row" id="azureUsageRow" style="display:none"><label id="labelAzureUsage">用量</label><span id="azureUsageInfo" style="font-size:11px;color:var(--muted)"></span></div>
       <div class="small" id="settingsNote">手机和平板可直接点输入框调出系统键盘。录屏优先尝试 MP4；若浏览器不支持，会自动保存为 WebM。</div>
       <div class="row"><button class="btn danger" id="clearLeaderboardBtn" style="width:100%;">清空排行榜</button></div>
       <div class="row"><label for="uiLanguage" id="labelUiLanguage">界面语言</label><select id="uiLanguage"><option value="zh-CN">中文</option><option value="en">English</option></select></div>
@@ -535,8 +536,84 @@
 
     const AZURE_DEFAULT_KEY = atob('RkpKUUxuTHNMbjZWbWExbmxKMXFPNVFxbGhMYWEzZ2IwZU03TEFhTFpBelN2MGx4cEJtbUpRUUo5OUNDQUMzcEthUlhKM3czQUFBWUFDT0dWWTBl');
     const AZURE_DEFAULT_REGION = 'eastasia';
+    const AZURE_KEY_LIMIT_SEC = 5 * 3600;
+    const AZURE_KEY_WARN_SEC = 4.5 * 3600;
+    let _azureKeys = [];
+    let _azureKeyIndex = 0;
+    function _loadAzureUsage(){
+      try { return JSON.parse(localStorage.getItem('azureKeyUsage') || '{}'); } catch { return {}; }
+    }
+    function _saveAzureUsage(usage){ localStorage.setItem('azureKeyUsage', JSON.stringify(usage)); }
+    function _keyHash(k){ let h=0; for(let i=0;i<k.length;i++){h=((h<<5)-h)+k.charCodeAt(i);h|=0;} return 'k'+Math.abs(h); }
+    function _parseAzureKeys(){
+      const raw = ($('azureKey')?.value || '').trim();
+      const keys = raw ? raw.split(/[,\n]+/).map(s=>s.trim()).filter(Boolean) : [AZURE_DEFAULT_KEY];
+      _azureKeys = keys;
+      _selectBestKey();
+      _updateUsageDisplay();
+    }
+    function _selectBestKey(){
+      const usage = _loadAzureUsage();
+      for (let i = 0; i < _azureKeys.length; i++) {
+        const used = usage[_keyHash(_azureKeys[i])] || 0;
+        if (used < AZURE_KEY_WARN_SEC) { _azureKeyIndex = i; return; }
+      }
+      for (let i = 0; i < _azureKeys.length; i++) {
+        const used = usage[_keyHash(_azureKeys[i])] || 0;
+        if (used < AZURE_KEY_LIMIT_SEC) { _azureKeyIndex = i; return; }
+      }
+      _azureKeyIndex = 0;
+    }
+    function _recordAzureUsage(seconds){
+      const key = _azureKeys[_azureKeyIndex];
+      if (!key) return;
+      const usage = _loadAzureUsage();
+      const hash = _keyHash(key);
+      const prev = usage[hash] || 0;
+      usage[hash] = prev + seconds;
+      _saveAzureUsage(usage);
+      if (prev < AZURE_KEY_WARN_SEC && usage[hash] >= AZURE_KEY_WARN_SEC) {
+        const keyNum = _azureKeyIndex + 1;
+        const nextIdx = _azureKeys.findIndex((k,i) => i !== _azureKeyIndex && (_loadAzureUsage()[_keyHash(k)]||0) < AZURE_KEY_WARN_SEC);
+        if (nextIdx !== -1) {
+          _showKeySwitch(keyNum, nextIdx + 1);
+          _azureKeyIndex = nextIdx;
+        } else {
+          _showKeyExhaust(keyNum);
+        }
+      }
+      _updateUsageDisplay();
+    }
+    function _showKeySwitch(fromNum, toNum){
+      const msg = `🔑 Key #${fromNum} 用量接近上限，自动切换到 Key #${toNum}`;
+      console.log(msg);
+      if (micLabel) { micLabel.textContent = msg; micStatus.classList.add('show'); setTimeout(() => { if (!voiceInputActive) micStatus.classList.remove('show'); }, 4000); }
+    }
+    function _showKeyExhaust(keyNum){
+      const msg = `⚠️ Key #${keyNum} 用量接近上限，无更多可用Key`;
+      console.warn(msg);
+      if (micLabel) { micLabel.textContent = msg; micStatus.classList.add('show','error'); setTimeout(() => { if (!voiceInputActive) micStatus.classList.remove('show','error'); }, 5000); }
+    }
+    function _updateUsageDisplay(){
+      const row = $('azureUsageRow');
+      const info = $('azureUsageInfo');
+      if (!row || !info) return;
+      if (_azureKeys.length <= 1 && _azureKeys[0] === AZURE_DEFAULT_KEY) { row.style.display = 'none'; return; }
+      row.style.display = '';
+      const usage = _loadAzureUsage();
+      const parts = _azureKeys.map((k,i) => {
+        const used = usage[_keyHash(k)] || 0;
+        const mins = Math.round(used / 60);
+        const limitMins = Math.round(AZURE_KEY_LIMIT_SEC / 60);
+        const active = i === _azureKeyIndex ? ' ✅' : '';
+        const warn = used >= AZURE_KEY_WARN_SEC ? ' ⚠️' : '';
+        return `#${i+1}: ${mins}/${limitMins}分${active}${warn}`;
+      });
+      info.textContent = parts.join('  |  ');
+    }
     function getAzureConfig(){
-      const key = ($('azureKey')?.value?.trim()) || AZURE_DEFAULT_KEY;
+      if (!_azureKeys.length) _parseAzureKeys();
+      const key = _azureKeys[_azureKeyIndex] || AZURE_DEFAULT_KEY;
       const region = ($('azureRegion')?.value?.trim()) || AZURE_DEFAULT_REGION;
       return (key && typeof SpeechSDK !== 'undefined') ? { key, region } : null;
     }
@@ -930,6 +1007,8 @@
         };
         recognizer.recognized = (s, e) => {
           if (!voiceInputActive) return;
+          const durTicks = e.result.duration || 0;
+          _recordAzureUsage(durTicks > 0 ? durTicks / 10000000 : 2.5);
           if (e.result.reason === SpeechSDK.ResultReason.RecognizedSpeech) {
             const alts = extractAzureNBest(e.result);
             showHeardText((alts[0]?.transcript || e.result.text) + ' → ' + (bestLetterFromAlternatives(alts) || '?'));
@@ -1436,6 +1515,8 @@
         if (!recognizer) { stopDictationSession(t('dictationMicError')); playSequenceOnly(); return; }
         dictationSession.azureRecognizer = recognizer;
         recognizer.recognized = (s, e) => {
+          const durTicks = e.result.duration || 0;
+          _recordAzureUsage(durTicks > 0 ? durTicks / 10000000 : 2.5);
           if (e.result.reason === SpeechSDK.ResultReason.RecognizedSpeech) {
             const alts = extractAzureNBest(e.result);
             handleDictationResult(alts);
@@ -1734,6 +1815,8 @@
 
     updateHUD();
     updateUILanguage();
+    _parseAzureKeys();
+    $('azureKey')?.addEventListener('input', _parseAzureKeys);
     renderLeaderboard();
     setTimeout(announceLeaderboard, 400);
     setRecUI(false);
