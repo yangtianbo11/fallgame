@@ -213,7 +213,7 @@
       <button class="btn" id="startRecBtn">开始录音</button>
       <button class="btn" id="settingsBtn">设置</button>
       <button class="btn" id="inputModeBtn">🎤</button>
-      <button class="btn" id="pauseBtn" style="display:none">⏸</button>
+      <button class="btn" id="pauseBtn" disabled style="opacity:0.4">⏸</button>
     </div>
 
     <div id="dictationPanel" aria-live="polite">
@@ -1083,7 +1083,8 @@
       startGameBtn.textContent = on ? t('endGame') : t('startGame');
       startGameBtn.classList.toggle('danger', on);
       startGameBtn.classList.toggle('primary', !on);
-      pauseBtn.style.display = on ? '' : 'none';
+      pauseBtn.disabled = !on;
+      pauseBtn.style.opacity = on ? '1' : '0.4';
       pauseBtn.textContent = '⏸';
     }
     function setDictationButtonUI(on){
