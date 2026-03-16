@@ -287,7 +287,7 @@
         noClickedLetters:'还没有记录到点击字母', allCorrect:'全部正确，无需听写！', noScreenRecord:'当前设备或浏览器不支持网页内录屏。', recordStartFail:'录像启动失败：你可能取消了共享，或当前浏览器限制了录屏。',
         leaderboardIntro:'当前浏览器保存的最高分排行榜如下。', rank:'第', place:'名', time:'时间',
         dictationTitle:'AI语音评分', dictationReady:'完成基础模式后，点击“听写”开始评分。', dictationPrompt:'请跟读', dictationListening:'识别中', dictationMissed:'未识别', dictationResult:'评分结果', dictationStopped:'听写已停止', dictationFallback:'当前浏览器不支持语音评分，已切换为仅朗读听写。', dictationMicError:'麦克风不可用，已切换为仅朗读听写。',         dictationAverage:'平均分', dictationPassRate:'达标率', dictationHeard:'识别', allPassed:'🎉 全部过关！', dictationRemaining:'剩余未过关',
-        paused:'⏸ 已暂停', inputMode:'输入方式', inputKeyboard:'键盘输入', inputVoice:'语音输入', micListening:'语音输入中', micError:'语音不可用', voiceNotSupported:'当前浏览器不支持原生语音识别。请在设置中填写 Azure Speech Key，或改用 Chrome/Edge 浏览器。', azureNote:'Firefox/微信浏览器需填写 Azure 语音服务密钥才能使用语音输入'
+        basicComplete:'🎉 26个字母全部识别完成！', paused:'⏸ 已暂停', inputMode:'输入方式', inputKeyboard:'键盘输入', inputVoice:'语音输入', micListening:'语音输入中', micError:'语音不可用', voiceNotSupported:'当前浏览器不支持原生语音识别。请在设置中填写 Azure Speech Key，或改用 Chrome/Edge 浏览器。', azureNote:'Firefox/微信浏览器需填写 Azure 语音服务密钥才能使用语音输入'
       },
       en: {
         basic:'Basic', advanced:'Dictation', stopDictation:'Stop Dictation', startGame:'Start Game', endGame:'End Game', startRec:'Start Recording', stopRec:'Stop Recording', settings:'Settings', close:'Close', restart:'Restart',
@@ -301,7 +301,7 @@
         noClickedLetters:'No clicked letters recorded yet', allCorrect:'All correct, no dictation needed!', noScreenRecord:'This device or browser does not support in-page screen recording.', recordStartFail:'Recording failed to start. You may have canceled sharing, or recording is restricted by the browser.',
         leaderboardIntro:'Top scores saved in this browser are as follows.', rank:'#', place:'', time:'Time',
         dictationTitle:'AI Pronunciation Score', dictationReady:'Finish basic mode, then tap Dictation to start scoring.', dictationPrompt:'Repeat', dictationListening:'Listening', dictationMissed:'No result', dictationResult:'Score', dictationStopped:'Dictation stopped.', dictationFallback:'Speech scoring is unavailable in this browser, so playback-only dictation is used instead.', dictationMicError:'Microphone is unavailable, so playback-only dictation is used instead.',         dictationAverage:'Average', dictationPassRate:'Pass rate', dictationHeard:'Heard', allPassed:'🎉 All passed!', dictationRemaining:'Remaining',
-        paused:'⏸ PAUSED', inputMode:'Input mode', inputKeyboard:'Keyboard', inputVoice:'Voice', micListening:'Voice input active', micError:'Voice unavailable', voiceNotSupported:'Native speech recognition is not supported. Please enter an Azure Speech Key in Settings, or use Chrome/Edge.', azureNote:'Firefox/WeChat browser requires Azure Speech Key for voice input'
+        basicComplete:'🎉 All 26 letters recognized!', paused:'⏸ PAUSED', inputMode:'Input mode', inputKeyboard:'Keyboard', inputVoice:'Voice', micListening:'Voice input active', micError:'Voice unavailable', voiceNotSupported:'Native speech recognition is not supported. Please enter an Azure Speech Key in Settings, or use Chrome/Edge.', azureNote:'Firefox/WeChat browser requires Azure Speech Key for voice input'
       }
     };
 
@@ -1317,8 +1317,8 @@
       updateHUD();
       if (gameMode === 'basic' && obj.basic) {
         obj.clicked = true;
-        basicClickedSequence.push(ch);
-        setTimeout(() => settleBasicLetter(obj), 260);
+        if (!basicClickedSequence.includes(ch)) basicClickedSequence.push(ch);
+        setTimeout(() => { settleBasicLetter(obj); checkBasicComplete(); }, 260);
       } else {
         setTimeout(() => removeLetter(obj), 220);
       }
@@ -1394,6 +1394,19 @@
         obj.el.style.color = '';
         repositionSettledLetters();
       }
+      checkBasicComplete();
+    }
+    function checkBasicComplete(){
+      if (gameMode !== 'basic' || !running) return;
+      if (basicClickedSequence.length < 26) return;
+      const allSettled = letters.filter(o => o.basic && o.alive).length === 0;
+      if (!allSettled && basicNextIndex < 26) return;
+      setTimeout(() => {
+        if (!running || gameMode !== 'basic') return;
+        playFlute();
+        speakLetter(t('allCorrect'), 0.9, uiLanguageSel.value === 'en' ? 'en-US' : 'zh-CN');
+        endGame(t('basicComplete'));
+      }, 600);
     }
     function completeDictationAttempt(result){
       const session = dictationSession;
