@@ -184,7 +184,7 @@
       #kbdWrap{width:min(98vw,380px);padding:8px;bottom:calc(var(--safe-bottom) + 86px)}
       .kbdRow{gap:4px}
       #mobileInputWrap{bottom:calc(var(--safe-bottom) + 210px);width:min(92vw,360px);z-index:54}
-      #basicModeBtn,#advancedModeBtn,#startGameBtn,#startRecBtn,#settingsBtn,#inputModeBtn{display:block!important;visibility:visible!important;opacity:1!important}
+      #basicModeBtn,#advancedModeBtn,#startGameBtn,#startRecBtn,#settingsBtn,#inputModeBtn,#pauseBtn{display:block!important;visibility:visible!important;opacity:1!important}
     }
   </style>
 </head>
@@ -213,6 +213,7 @@
       <button class="btn" id="startRecBtn">开始录音</button>
       <button class="btn" id="settingsBtn">设置</button>
       <button class="btn" id="inputModeBtn">🎤</button>
+      <button class="btn" id="pauseBtn" style="display:none">⏸</button>
     </div>
 
     <div id="dictationPanel" aria-live="polite">
@@ -341,6 +342,7 @@
     const voiceDurationRange = $('voiceDuration');
     const uiLanguageSel = $('uiLanguage');
     const inputModeBtn = $('inputModeBtn');
+    const pauseBtn = $('pauseBtn');
     const pauseOverlay = $('pauseOverlay');
     let currentInputMode = 'voice';
     const micStatus = $('micStatus');
@@ -1081,6 +1083,8 @@
       startGameBtn.textContent = on ? t('endGame') : t('startGame');
       startGameBtn.classList.toggle('danger', on);
       startGameBtn.classList.toggle('primary', !on);
+      pauseBtn.style.display = on ? '' : 'none';
+      pauseBtn.textContent = '⏸';
     }
     function setDictationButtonUI(on){
       advancedModeBtn.textContent = on ? t('stopDictation') : t('advanced');
@@ -1589,6 +1593,7 @@
       paused = !paused;
       pauseOverlay.textContent = t('paused');
       pauseOverlay.classList.toggle('show', paused);
+      pauseBtn.textContent = paused ? '▶' : '⏸';
       if (paused) {
         window.speechSynthesis.cancel();
         letters.forEach(obj => { if (obj.basic) clearBasicSpeechTimers(obj); });
@@ -1778,6 +1783,7 @@
       }
     }
     inputModeBtn.addEventListener('click', toggleInputMode);
+    pauseBtn.addEventListener('click', togglePause);
     clearLeaderboardBtn.addEventListener('click', () => {
       try { localStorage.removeItem(SCORE_STORAGE_KEY); } catch {}
       latestSavedRecordKey = null;
