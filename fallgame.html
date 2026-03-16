@@ -1528,6 +1528,7 @@
         setTimeout(() => keyEl.classList.remove('pressed'), 120);
       }
       if (!running) return;
+      if (paused && !isVoiceMode()) return;
       if (isBasicDictationPaused()) return;
       const candidates = letters.filter(obj => obj.alive && obj.ch === key);
       if (candidates.length) {
@@ -1698,10 +1699,15 @@
     }
     ['pointerdown','keydown','touchstart','touchend','click'].forEach(ev => window.addEventListener(ev, unlockOnce, { once: false }));
     document.querySelectorAll('.btn').forEach(btn => btn.addEventListener('click', () => { if (!audioUnlocked) ensureAudio(); }, true));
+    let _lastPauseTap = 0;
     game.addEventListener('click', (e) => {
       if (!running) return;
       const interactive = e.target.closest('button, input, select, a, #controlBar, #settings, #hud, #leaderboard, #dictationPanel, #gameOver, #mobileInputWrap, #tapToEnable, #kbdWrap, #micStatus');
       if (interactive) return;
+      if (isVoiceMode() && !paused) return;
+      const now = Date.now();
+      if (now - _lastPauseTap < 400) return;
+      _lastPauseTap = now;
       togglePause();
     });
     window.addEventListener('orientationchange', () => setTimeout(() => { focusBestInput(); repositionSettledLetters(); }, 300));
