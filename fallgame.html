@@ -1534,6 +1534,18 @@
       if (candidates.length) {
         candidates.sort((a,b) => b.y - a.y);
         onCorrect(key, candidates[0]);
+      } else if (gameMode === 'basic') {
+        const settled = settledLetters.find(o => o.ch === key && !o.clicked);
+        if (settled) {
+          markLetterAsRecognized(key);
+          combo += 1; streakBad = 0;
+          score += 10 + Math.min(20, combo);
+          maxComboSeen = Math.max(maxComboSeen, combo);
+          playWater();
+          window.speechSynthesis.cancel();
+          speakLetter(key);
+          updateHUD();
+        }
       } else if (isVoiceMode()) {
         const idx = recentlyFallen.findIndex(r => r.ch === key);
         if (idx !== -1) {
