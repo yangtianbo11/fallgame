@@ -513,6 +513,7 @@
         const upper = (text || '').toUpperCase().trim();
         if (upper.length === 1 && LETTER_AUDIO[upper]) {
           if (!_letterPlayer) _letterPlayer = new Audio();
+          _letterPlayer.volume = 1.0;
           _letterPlayer.src = LETTER_AUDIO[upper];
           _letterPlayer.playbackRate = 1.0;
           _letterPlayer.currentTime = 0;
