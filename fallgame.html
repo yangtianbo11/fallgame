@@ -184,7 +184,7 @@
       #kbdWrap{width:min(98vw,380px);padding:8px;bottom:calc(var(--safe-bottom) + 86px)}
       .kbdRow{gap:4px}
       #mobileInputWrap{bottom:calc(var(--safe-bottom) + 210px);width:min(92vw,360px);z-index:54}
-      #basicModeBtn,#advancedModeBtn,#startGameBtn,#startRecBtn,#settingsBtn,#inputModeBtn,#pauseBtn{display:block!important;visibility:visible!important;opacity:1!important}
+      #basicModeBtn,#advancedModeBtn,#startGameBtn,#startRecBtn,#settingsBtn,#inputModeBtn{display:block!important;visibility:visible!important;opacity:1!important}
     }
   </style>
 </head>
@@ -199,6 +199,7 @@
       <div class="pill bad"><span class="k" id="labelMistakes">连错</span><span class="v" id="streakBad">0</span></div>
       <div class="pill"><span class="k" id="labelLevel">Level</span><span class="v" id="level">1</span></div>
       <div class="pill"><span class="k" id="labelRec">REC</span><span class="v" style="display:flex;align-items:center;gap:8px"><span id="recDot"></span><span id="recText">OFF</span></span></div>
+      <span id="pauseBtn" class="pill" style="cursor:pointer;opacity:0.4;user-select:none" disabled>⏸</span>
     </div>
 
     <div id="leaderboard" aria-label="最高分排行榜">
@@ -213,7 +214,6 @@
       <button class="btn" id="startRecBtn">开始录音</button>
       <button class="btn" id="settingsBtn">设置</button>
       <button class="btn" id="inputModeBtn">🎤</button>
-      <button class="btn" id="pauseBtn" disabled style="opacity:0.4">⏸</button>
     </div>
 
     <div id="dictationPanel" aria-live="polite">
@@ -1083,8 +1083,8 @@
       startGameBtn.textContent = on ? t('endGame') : t('startGame');
       startGameBtn.classList.toggle('danger', on);
       startGameBtn.classList.toggle('primary', !on);
-      pauseBtn.disabled = !on;
       pauseBtn.style.opacity = on ? '1' : '0.4';
+      pauseBtn.style.pointerEvents = on ? 'auto' : 'none';
       pauseBtn.textContent = '⏸';
     }
     function setDictationButtonUI(on){
