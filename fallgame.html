@@ -1348,7 +1348,6 @@
     }
 
     function onCorrect(ch, obj){
-      obj.el.classList.add('hit');
       playWater();
       window.speechSynthesis.cancel();
       speakLetter(ch);
@@ -1358,11 +1357,12 @@
       maxComboSeen = Math.max(maxComboSeen, combo);
       updateHUD();
       if (gameMode === 'basic' && obj.basic) {
+        obj.el.classList.add('hit');
         obj.clicked = true;
         if (!basicClickedSequence.includes(ch)) basicClickedSequence.push(ch);
         setTimeout(() => { settleBasicLetter(obj); checkBasicComplete(); }, 260);
       } else {
-        setTimeout(() => removeLetter(obj), 220);
+        removeLetter(obj);
       }
     }
 
