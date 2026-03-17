@@ -1119,6 +1119,10 @@
       repositionSettledLetters();
     }
     function clearBasicSpeechTimers(obj){
+      if (obj?._scheduledSources) {
+        obj._scheduledSources.forEach(src => { try { src.stop(); } catch {} });
+        obj._scheduledSources = [];
+      }
       if (!obj?.speechTimers?.length) return;
       obj.speechTimers.forEach(id => clearTimeout(id));
       obj.speechTimers = [];
@@ -1126,12 +1130,29 @@
     function scheduleBasicSpeech(obj){
       if (!obj?.basic) return;
       clearBasicSpeechTimers(obj);
-      const delays = [0, 1150, 2300];
-      obj.speechTimers = delays.map(delay => setTimeout(() => {
-        if (!running || !obj.alive || obj.clicked || obj.settled) return;
-        window.speechSynthesis.cancel();
-        speakLetter(obj.ch);
-      }, delay));
+      const upper = obj.ch.toUpperCase();
+      const buffer = _decodedBuffers[upper];
+      if (buffer && audioCtx && audioCtx.state === 'running') {
+        const now = audioCtx.currentTime;
+        const delaysSec = [0, 1.15, 2.3];
+        obj._scheduledSources = delaysSec.map(d => {
+          const src = audioCtx.createBufferSource();
+          src.buffer = buffer;
+          src.playbackRate.value = 1.0;
+          const gain = audioCtx.createGain();
+          gain.gain.value = 1.0;
+          src.connect(gain);
+          gain.connect(audioCtx.destination);
+          src.start(now + d);
+          return src;
+        });
+      } else {
+        const delays = [0, 1150, 2300];
+        obj.speechTimers = delays.map(delay => setTimeout(() => {
+          if (!running || !obj.alive || obj.clicked || obj.settled) return;
+          speakLetter(obj.ch);
+        }, delay));
+      }
     }
     function isBasicDictationPaused(){
       return gameMode === 'basic' && !!dictationSession?.active;
@@ -1612,6 +1633,8 @@
       if (isVoiceMode()) startVoiceInput(); else focusBestInput();
     }
     function startBasicMode(){
+      ensureAudio();
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
       gameMode = 'basic';
       gameOver.classList.remove('show');
       stopDictationSession('', false);
@@ -1620,7 +1643,7 @@
       setGameToggleUI(true);
       applyInputModeUI();
       if (isVoiceMode()) startVoiceInput(); else focusBestInput();
-      spawnNextBasicLetter();
+      setTimeout(() => spawnNextBasicLetter(), 200);
     }
     function stopGame(){ if (running) endGame(t('manualEnd')); }
     function togglePause(){
