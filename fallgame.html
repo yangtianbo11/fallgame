@@ -1822,7 +1822,7 @@
     startRecBtn.addEventListener('click', () => { if (recorder && recorder.state !== 'inactive') stopRecording(); else startRecording(); });
     restartBtn.addEventListener('click', () => { if (gameMode === 'basic') startBasicMode(); else startGame(); });
     closeOverBtn.addEventListener('click', () => gameOver.classList.remove('show'));
-    hpMaxInput.addEventListener('change', () => { hpMax = Number(hpMaxInput.value) || 5; hp = Math.min(hp, hpMax); updateHUD(); });
+    hpMaxInput.addEventListener('change', () => { hpMax = Math.max(1, Math.min(20, Number(hpMaxInput.value) || 10)); hp = hpMax; updateHUD(); });
     uiLanguageSel.addEventListener('change', updateUILanguage);
     function updateInputModeBtn(){
       inputModeBtn.textContent = isVoiceMode() ? '🎤' : '⌨️';
