@@ -1406,6 +1406,7 @@
       }
       dictationSession = null;
       setDictationButtonUI(false);
+      setMicUI('off');
       if (resumeBasic && running && gameMode === 'basic') syncBasicLetterSpeech(false);
       if (resumeBasic && running && isVoiceMode()) startVoiceInput();
       if (message) showDictationPanel(message);
@@ -1507,6 +1508,7 @@
           playSequenceOnly();
           return;
         }
+        ensureAudio();
         launchDictationRecognition(seq);
       });
     }
@@ -1527,14 +1529,17 @@
       if (running && gameMode === 'basic') syncBasicLetterSpeech(true);
       if (SpeechRecognitionCtor) {
         launchDictationNative();
+        dictationSession.stepTimer = setTimeout(runDictationStep, 200);
       } else {
         launchDictationAzure();
       }
-      dictationSession.stepTimer = setTimeout(runDictationStep, 260);
     }
     function handleDictationResult(alternatives){
       if (!dictationSession?.active || !dictationSession.awaiting) return;
-      completeDictationAttempt(scorePronunciation(dictationSession.sequence[dictationSession.index], alternatives));
+      const expected = dictationSession.sequence[dictationSession.index];
+      const eval2 = scorePronunciation(expected, alternatives);
+      showHeardText((eval2.heard || t('dictationMissed')) + ' → ' + (eval2.score > 80 ? expected : '?'));
+      completeDictationAttempt(eval2);
     }
     function launchDictationNative(){
       const recognition = new SpeechRecognitionCtor();
@@ -1574,6 +1579,9 @@
         const recognizer = createAzureRecognizer(voiceLangSel.value || 'en-US');
         if (!recognizer) { stopDictationSession(t('dictationMicError')); playSequenceOnly(); return; }
         dictationSession.azureRecognizer = recognizer;
+        recognizer.recognizing = (s, e) => {
+          if (dictationSession?.active) showHeardText(e.result.text || '...');
+        };
         recognizer.recognized = (s, e) => {
           const durTicks = e.result.duration || 0;
           _recordAzureUsage(durTicks > 0 ? durTicks / 10000000 : 2.5);
@@ -1588,7 +1596,9 @@
             playSequenceOnly();
           }
         };
-        recognizer.startContinuousRecognitionAsync(() => {}, () => {
+        recognizer.startContinuousRecognitionAsync(() => {
+          dictationSession.stepTimer = setTimeout(runDictationStep, 0);
+        }, () => {
           stopDictationSession(t('dictationMicError'));
           playSequenceOnly();
         });
