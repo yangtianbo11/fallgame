@@ -1537,7 +1537,12 @@
     function handleDictationResult(alternatives){
       if (!dictationSession?.active || !dictationSession.awaiting) return;
       const expected = dictationSession.sequence[dictationSession.index];
-      const eval2 = scorePronunciation(expected, alternatives);
+      let eval2 = scorePronunciation(expected, alternatives);
+      const bestLetter = bestLetterFromAlternatives(alternatives);
+      if (eval2.score <= 80 && bestLetter === expected) {
+        const heard = (alternatives[0]?.transcript || '').trim() || eval2.heard;
+        eval2 = { heard, score: 85, pass: true };
+      }
       showHeardText((eval2.heard || t('dictationMissed')) + ' → ' + (eval2.score > 80 ? expected : '?'));
       completeDictationAttempt(eval2);
     }
