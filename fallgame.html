@@ -954,6 +954,7 @@
       });
     }
     function processVoiceTranscript(transcript){
+      if (shouldDropVoiceAsBasicSystemEcho()) return;
       const letter = transcriptToLetter(transcript);
       if (letter) processLetterKey(letter);
     }
@@ -976,6 +977,7 @@
             alts.push({ transcript: result[j].transcript, confidence: result[j].confidence });
           }
           showHeardText(alts[0]?.transcript || '');
+          if (shouldDropVoiceAsBasicSystemEcho()) continue;
           const letter = bestLetterFromAlternatives(alts);
           if (letter) processLetterKey(letter);
         }
@@ -1035,12 +1037,13 @@
           if (e.result.reason === SpeechSDK.ResultReason.RecognizedSpeech) {
             const alts = extractAzureNBest(e.result);
             showHeardText((alts[0]?.transcript || e.result.text) + ' → ' + (bestLetterFromAlternatives(alts) || '?'));
+            if (shouldDropVoiceAsBasicSystemEcho()) return;
             const letter = bestLetterFromAlternatives(alts);
             if (letter) processLetterKey(letter);
           }
         };
         recognizer.canceled = (s, e) => {
-          if (e.reason === SpeechSDK.CancellationReason.Error) {
+          if (e.reason === SpeechSDK.CancellationReason.Error && voiceInputActive) {
             console.warn('Azure recognition error:', e.errorDetails);
             setMicUI('error');
           }
@@ -1061,6 +1064,7 @@
         voiceRecognition = null;
       }
       if (azureRecognizer) {
+        try { azureRecognizer.canceled = () => {}; } catch {}
         try { azureRecognizer.stopContinuousRecognitionAsync(); } catch {}
         try { azureRecognizer.close(); } catch {}
         azureRecognizer = null;
@@ -1119,6 +1123,7 @@
       repositionSettledLetters();
     }
     function clearBasicSpeechTimers(obj){
+      if (obj) obj._speechSuppressUntil = 0;
       if (obj?._scheduledSources) {
         obj._scheduledSources.forEach(src => { try { src.stop(); } catch {} });
         obj._scheduledSources = [];
@@ -1127,11 +1132,23 @@
       obj.speechTimers.forEach(id => clearTimeout(id));
       obj.speechTimers = [];
     }
+    /** 基础模式：系统连播 3 次字母时，麦克风会拾音误匹配，此窗口内丢弃语音识别结果 */
+    function shouldDropVoiceAsBasicSystemEcho(){
+      if (gameMode !== 'basic' || !running) return false;
+      const now = performance.now();
+      for (let i = 0; i < letters.length; i++) {
+        const o = letters[i];
+        if (o.alive && o.basic && !o.clicked && !o.settled && o._speechSuppressUntil > now) return true;
+      }
+      return false;
+    }
     function scheduleBasicSpeech(obj){
       if (!obj?.basic) return;
       clearBasicSpeechTimers(obj);
       const upper = obj.ch.toUpperCase();
       const buffer = _decodedBuffers[upper];
+      const marginMs = 500;
+      const durSec = (buffer && buffer.duration) || 0.85;
       if (buffer && audioCtx && audioCtx.state === 'running') {
         const now = audioCtx.currentTime;
         const delaysSec = [0, 1.15, 2.3];
@@ -1146,8 +1163,11 @@
           src.start(now + d);
           return src;
         });
+        obj._speechSuppressUntil = performance.now() + (2.3 + durSec) * 1000 + marginMs;
       } else {
         const delays = [0, 1150, 2300];
+        const decodeLagMs = buffer ? 0 : 2200;
+        obj._speechSuppressUntil = performance.now() + 2300 + durSec * 1000 + marginMs + decodeLagMs;
         obj.speechTimers = delays.map(delay => setTimeout(() => {
           if (!running || !obj.alive || obj.clicked || obj.settled) return;
           speakLetter(obj.ch);
@@ -1401,8 +1421,12 @@
         try { dictationSession.recognition.stop(); } catch {}
       }
       if (dictationSession.azureRecognizer) {
-        try { dictationSession.azureRecognizer.stopContinuousRecognitionAsync(); } catch {}
-        try { dictationSession.azureRecognizer.close(); } catch {}
+        try {
+          const dr = dictationSession.azureRecognizer;
+          dr.canceled = () => {};
+          dr.stopContinuousRecognitionAsync();
+          dr.close();
+        } catch {}
       }
       dictationSession = null;
       setDictationButtonUI(false);
@@ -1596,12 +1620,14 @@
           }
         };
         recognizer.canceled = (s, e) => {
+          if (!dictationSession?.active || dictationSession.azureRecognizer !== recognizer) return;
           if (e.reason === SpeechSDK.CancellationReason.Error) {
             stopDictationSession(t('dictationMicError'));
             playSequenceOnly();
           }
         };
         recognizer.startContinuousRecognitionAsync(() => {
+          setMicUI('listening');
           dictationSession.stepTimer = setTimeout(runDictationStep, 0);
         }, () => {
           stopDictationSession(t('dictationMicError'));
