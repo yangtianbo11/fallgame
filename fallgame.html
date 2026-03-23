@@ -908,28 +908,37 @@
         micStatus.classList.remove('show','error');
       }
     }
+    let _micPermissionCache = null;
     async function ensureMicPermission(){
+      if (_micPermissionCache !== null) return _micPermissionCache;
       try {
         if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
           stream.getTracks().forEach(t => t.stop());
+          _micPermissionCache = true;
           return true;
         }
         if (navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia) {
           const legacy = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
-          return await new Promise(resolve => {
+          const ok = await new Promise(resolve => {
             legacy.call(navigator, { audio: true },
               stream => { stream.getTracks().forEach(t => t.stop()); resolve(true); },
               () => resolve(false));
           });
+          _micPermissionCache = ok;
+          return ok;
         }
         console.warn('No getUserMedia API available');
+        _micPermissionCache = false;
         return false;
-      } catch(e) { console.warn('Mic permission error:', e); return false; }
+      } catch(e) { console.warn('Mic permission error:', e); _micPermissionCache = false; return false; }
     }
     let azureRecognizer = null;
+    let _azureRetryCount = 0;
+    const _AZURE_MAX_RETRIES = 5;
     function startVoiceInput(){
       if (voiceInputActive) return;
+      _azureRetryCount = 0;
       const hasSR = !!SpeechRecognitionCtor;
       const hasAzure = !!getAzureConfig();
       if (!hasSR && !hasAzure) {
@@ -942,15 +951,21 @@
       if (dictationSession?.active) return;
       voiceInputActive = true;
       setMicUI('listening');
+      /* 原生 Web Speech 会自行在 recognition.start() 时申请麦克风；若再先调 getUserMedia，
+         许多浏览器会出现两次权限/系统弹窗，且弹窗期间若 voiceInputActive 被清掉会误判为「拒绝」而红字报错。 */
+      if (SpeechRecognitionCtor) {
+        launchRecognitionNative();
+        return;
+      }
       ensureMicPermission().then(granted => {
-        if (!granted || !voiceInputActive) {
+        if (!voiceInputActive) return;
+        if (!granted) {
           voiceInputActive = false;
           setMicUI('error');
           alert('麦克风权限被拒绝，请在浏览器设置中允许使用麦克风');
           return;
         }
-        if (SpeechRecognitionCtor) launchRecognitionNative();
-        else launchRecognitionAzure();
+        launchRecognitionAzure();
       });
     }
     function processVoiceTranscript(transcript){
@@ -996,7 +1011,13 @@
       };
       recognition.onend = () => {
         if (!voiceInputActive || permissionDenied) return;
-        try { recognition.start(); } catch {}
+        try {
+          recognition.start();
+          setMicUI('listening');
+        } catch (e) {
+          console.warn('SpeechRecognition restart failed:', e);
+          stopVoiceInput({ micError: true });
+        }
       };
       voiceRecognition = recognition;
       let nativeGotResult = false;
@@ -1005,7 +1026,10 @@
         nativeGotResult = true;
         origOnResult(event);
       };
-      try { recognition.start(); setMicUI('listening'); } catch { setMicUI('error'); }
+      try { recognition.start(); setMicUI('listening'); } catch (e) {
+        console.warn('SpeechRecognition start failed:', e);
+        stopVoiceInput({ micError: true });
+      }
       if (getAzureConfig()) {
         setTimeout(() => {
           if (voiceInputActive && !nativeGotResult && voiceRecognition === recognition) {
@@ -1017,8 +1041,16 @@
         }, 8000);
       }
     }
+    function _cleanupAzureRecognizer(rec){
+      if (!rec) return;
+      try { rec.canceled = () => {}; } catch {}
+      try { rec.stopContinuousRecognitionAsync(); } catch {}
+      try { rec.close(); } catch {}
+      if (azureRecognizer === rec) azureRecognizer = null;
+    }
     function launchRecognitionAzure(){
       try {
+        _cleanupAzureRecognizer(azureRecognizer);
         const recognizer = createAzureRecognizer(voiceLangSel.value || 'en-US');
         if (!recognizer) {
           setMicUI('error'); voiceInputActive = false;
@@ -1032,6 +1064,7 @@
         };
         recognizer.recognized = (s, e) => {
           if (!voiceInputActive) return;
+          _azureRetryCount = 0;
           const durTicks = e.result.duration || 0;
           _recordAzureUsage(durTicks > 0 ? durTicks / 10000000 : 2.5);
           if (e.result.reason === SpeechSDK.ResultReason.RecognizedSpeech) {
@@ -1043,19 +1076,45 @@
           }
         };
         recognizer.canceled = (s, e) => {
-          if (e.reason === SpeechSDK.CancellationReason.Error && voiceInputActive) {
-            console.warn('Azure recognition error:', e.errorDetails);
-            setMicUI('error');
+          if (e.reason !== SpeechSDK.CancellationReason.Error || !voiceInputActive) return;
+          console.warn('Azure canceled:', e.errorDetails);
+          _cleanupAzureRecognizer(recognizer);
+          if (++_azureRetryCount <= _AZURE_MAX_RETRIES) {
+            console.log(`Azure auto-retry ${_azureRetryCount}/${_AZURE_MAX_RETRIES}`);
+            setMicUI('listening');
+            setTimeout(() => { if (voiceInputActive) launchRecognitionAzure(); }, 600 * _azureRetryCount);
+          } else {
+            stopVoiceInput({ micError: true });
           }
         };
         recognizer.startContinuousRecognitionAsync(
           () => setMicUI('listening'),
-          (err) => { console.warn('Azure start failed:', err); setMicUI('error'); voiceInputActive = false; }
+          (err) => {
+            console.warn('Azure start failed:', err);
+            _cleanupAzureRecognizer(recognizer);
+            if (++_azureRetryCount <= _AZURE_MAX_RETRIES) {
+              console.log(`Azure start retry ${_azureRetryCount}/${_AZURE_MAX_RETRIES}`);
+              setMicUI('listening');
+              setTimeout(() => { if (voiceInputActive) launchRecognitionAzure(); }, 600 * _azureRetryCount);
+            } else {
+              stopVoiceInput({ micError: true });
+            }
+          }
         );
-      } catch(e) { console.warn('Azure launch error:', e); setMicUI('error'); voiceInputActive = false; }
+      } catch(e) {
+        console.warn('Azure launch error:', e);
+        if (++_azureRetryCount <= _AZURE_MAX_RETRIES) {
+          setTimeout(() => { if (voiceInputActive) launchRecognitionAzure(); }, 600 * _azureRetryCount);
+        } else {
+          stopVoiceInput({ micError: true });
+        }
+      }
     }
-    function stopVoiceInput(){
+    /** @param {{ micError?: boolean }} [opts] — micError: 显示红字错误后仍须能再次点语音；须先把 voiceInputActive 置 false */
+    function stopVoiceInput(opts = {}){
+      const showMicError = opts.micError === true;
       voiceInputActive = false;
+      _azureRetryCount = 0;
       if (voiceRecognition) {
         voiceRecognition.onend = null;
         voiceRecognition.onresult = null;
@@ -1069,7 +1128,8 @@
         try { azureRecognizer.close(); } catch {}
         azureRecognizer = null;
       }
-      setMicUI('off');
+      if (showMicError) setMicUI('error');
+      else setMicUI('off');
     }
 
     let letters = [];
@@ -1091,6 +1151,7 @@
     let basicNextIndex = 0;
     let basicClickedSequence = [];
     let dictationSession = null;
+    let _dictationMicPermissionPending = false;
 
     function currentFallSpeed(){
       const base = Number(baseSpeedRange.value);
@@ -1404,6 +1465,7 @@
       speakNext();
     }
     function stopDictationSession(message = '', resumeBasic = true){
+      _dictationMicPermissionPending = false;
       if (!dictationSession) {
         if (message) showDictationPanel(message);
         setDictationButtonUI(false);
@@ -1525,13 +1587,17 @@
       stopVoiceInput();
       showDictationPanel(`${t('dictationTitle')}\n${t('dictationListening')}...`);
       setDictationButtonUI(true);
+      _dictationMicPermissionPending = true;
       ensureMicPermission().then(granted => {
+        if (!_dictationMicPermissionPending) return;
         if (!granted) {
+          _dictationMicPermissionPending = false;
           showDictationPanel(t('dictationMicError'));
           setDictationButtonUI(false);
           playSequenceOnly();
           return;
         }
+        _dictationMicPermissionPending = false;
         ensureAudio();
         launchDictationRecognition(seq);
       });
