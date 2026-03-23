@@ -1466,6 +1466,7 @@
     }
     function stopDictationSession(message = '', resumeBasic = true){
       _dictationMicPermissionPending = false;
+      _dictAzureRetryCount = 0;
       if (!dictationSession) {
         if (message) showDictationPanel(message);
         setDictationButtonUI(false);
@@ -1565,7 +1566,7 @@
       window.speechSynthesis.cancel();
       speakLetter(expected, 0.82);
       session.awaiting = true;
-      session.waitTimer = setTimeout(() => completeDictationAttempt({ heard: '', score: 0, pass: false }), 2500);
+      session.waitTimer = setTimeout(() => completeDictationAttempt({ heard: '', score: 0, pass: false }), 4500);
     }
     function startDictationSession(){
       const clickedSet = new Set(basicClickedSequence);
@@ -1588,6 +1589,7 @@
       showDictationPanel(`${t('dictationTitle')}\n${t('dictationListening')}...`);
       setDictationButtonUI(true);
       _dictationMicPermissionPending = true;
+      _dictAzureRetryCount = 0;
       ensureMicPermission().then(granted => {
         if (!_dictationMicPermissionPending) return;
         if (!granted) {
@@ -1669,8 +1671,19 @@
       dictationSession.recognition = recognition;
       try { recognition.start(); } catch {}
     }
+    let _dictAzureRetryCount = 0;
+    const _DICT_AZURE_MAX_RETRIES = 5;
+    function _cleanupDictAzureRecognizer(rec){
+      if (!rec) return;
+      try { rec.canceled = () => {}; } catch {}
+      try { rec.stopContinuousRecognitionAsync(); } catch {}
+      try { rec.close(); } catch {}
+      if (dictationSession && dictationSession.azureRecognizer === rec) dictationSession.azureRecognizer = null;
+    }
     function launchDictationAzure(){
+      if (!dictationSession?.active) return;
       try {
+        _cleanupDictAzureRecognizer(dictationSession.azureRecognizer);
         const recognizer = createAzureRecognizer(voiceLangSel.value || 'en-US');
         if (!recognizer) { stopDictationSession(t('dictationMicError')); playSequenceOnly(); return; }
         dictationSession.azureRecognizer = recognizer;
@@ -1678,6 +1691,7 @@
           if (dictationSession?.active) showHeardText(e.result.text || '...');
         };
         recognizer.recognized = (s, e) => {
+          _dictAzureRetryCount = 0;
           const durTicks = e.result.duration || 0;
           _recordAzureUsage(durTicks > 0 ? durTicks / 10000000 : 2.5);
           if (e.result.reason === SpeechSDK.ResultReason.RecognizedSpeech) {
@@ -1687,19 +1701,41 @@
         };
         recognizer.canceled = (s, e) => {
           if (!dictationSession?.active || dictationSession.azureRecognizer !== recognizer) return;
-          if (e.reason === SpeechSDK.CancellationReason.Error) {
+          if (e.reason !== SpeechSDK.CancellationReason.Error) return;
+          console.warn('Dictation Azure canceled:', e.errorDetails);
+          _cleanupDictAzureRecognizer(recognizer);
+          if (++_dictAzureRetryCount <= _DICT_AZURE_MAX_RETRIES) {
+            console.log(`Dictation Azure retry ${_dictAzureRetryCount}/${_DICT_AZURE_MAX_RETRIES}`);
+            setMicUI('listening');
+            setTimeout(() => { if (dictationSession?.active) launchDictationAzure(); }, 600 * _dictAzureRetryCount);
+          } else {
             stopDictationSession(t('dictationMicError'));
             playSequenceOnly();
           }
         };
         recognizer.startContinuousRecognitionAsync(() => {
           setMicUI('listening');
-          dictationSession.stepTimer = setTimeout(runDictationStep, 0);
-        }, () => {
-          stopDictationSession(t('dictationMicError'));
-          playSequenceOnly();
+          if (!dictationSession?.awaiting) {
+            dictationSession.stepTimer = setTimeout(runDictationStep, 0);
+          }
+        }, (err) => {
+          console.warn('Dictation Azure start failed:', err);
+          _cleanupDictAzureRecognizer(recognizer);
+          if (++_dictAzureRetryCount <= _DICT_AZURE_MAX_RETRIES) {
+            setTimeout(() => { if (dictationSession?.active) launchDictationAzure(); }, 600 * _dictAzureRetryCount);
+          } else {
+            stopDictationSession(t('dictationMicError'));
+            playSequenceOnly();
+          }
         });
-      } catch { stopDictationSession(t('dictationMicError')); playSequenceOnly(); }
+      } catch(e) {
+        console.warn('Dictation Azure error:', e);
+        if (++_dictAzureRetryCount <= _DICT_AZURE_MAX_RETRIES) {
+          setTimeout(() => { if (dictationSession?.active) launchDictationAzure(); }, 600 * _dictAzureRetryCount);
+        } else {
+          stopDictationSession(t('dictationMicError')); playSequenceOnly();
+        }
+      }
     }
 
     function endGame(reason){
