@@ -969,9 +969,8 @@
       });
     }
     function processVoiceTranscript(transcript){
-      if (shouldDropVoiceAsBasicSystemEcho()) return;
       const letter = transcriptToLetter(transcript);
-      if (letter) processLetterKey(letter);
+      if (letter && !isBasicSystemEchoLetter(letter)) processLetterKey(letter);
     }
     function showHeardText(text){
       if (micLabel) micLabel.textContent = t('micListening') + ' 🎤 ' + (text || '');
@@ -992,9 +991,8 @@
             alts.push({ transcript: result[j].transcript, confidence: result[j].confidence });
           }
           showHeardText(alts[0]?.transcript || '');
-          if (shouldDropVoiceAsBasicSystemEcho()) continue;
           const letter = bestLetterFromAlternatives(alts);
-          if (letter) processLetterKey(letter);
+          if (letter && !isBasicSystemEchoLetter(letter)) processLetterKey(letter);
         }
       };
       let permissionDenied = false;
@@ -1069,10 +1067,9 @@
           _recordAzureUsage(durTicks > 0 ? durTicks / 10000000 : 2.5);
           if (e.result.reason === SpeechSDK.ResultReason.RecognizedSpeech) {
             const alts = extractAzureNBest(e.result);
-            showHeardText((alts[0]?.transcript || e.result.text) + ' → ' + (bestLetterFromAlternatives(alts) || '?'));
-            if (shouldDropVoiceAsBasicSystemEcho()) return;
             const letter = bestLetterFromAlternatives(alts);
-            if (letter) processLetterKey(letter);
+            showHeardText((alts[0]?.transcript || e.result.text) + ' → ' + (letter || '?'));
+            if (letter && !isBasicSystemEchoLetter(letter)) processLetterKey(letter);
           }
         };
         recognizer.canceled = (s, e) => {
@@ -1193,13 +1190,13 @@
       obj.speechTimers.forEach(id => clearTimeout(id));
       obj.speechTimers = [];
     }
-    /** 基础模式：系统连播 3 次字母时，麦克风会拾音误匹配，此窗口内丢弃语音识别结果 */
-    function shouldDropVoiceAsBasicSystemEcho(){
-      if (gameMode !== 'basic' || !running) return false;
+    /** 基础模式：系统正在播某个字母时，仅丢弃与该字母相同的识别结果（回声），不阻止其他字母 */
+    function isBasicSystemEchoLetter(recognizedLetter){
+      if (gameMode !== 'basic' || !running || !recognizedLetter) return false;
       const now = performance.now();
       for (let i = 0; i < letters.length; i++) {
         const o = letters[i];
-        if (o.alive && o.basic && !o.clicked && !o.settled && o._speechSuppressUntil > now) return true;
+        if (o.alive && o.basic && !o.clicked && !o.settled && o._speechSuppressUntil > now && o.ch === recognizedLetter) return true;
       }
       return false;
     }
