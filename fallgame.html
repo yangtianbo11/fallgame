@@ -1555,15 +1555,28 @@
         session.stepTimer = setTimeout(runDictationStep, 900);
       }
     }
+    function _dictationTimeoutFallback(){
+      const session = dictationSession;
+      if (!session?.active || !session.awaiting) return;
+      const expected = session.sequence[session.index];
+      const partialText = (session.lastRecognizingText || '').trim();
+      if (partialText) {
+        const alts = [{ transcript: partialText, confidence: 0.6 }];
+        handleDictationResult(alts);
+        if (!session.awaiting) return;
+      }
+      completeDictationAttempt({ heard: partialText || '', score: 0, pass: false });
+    }
     function runDictationStep(){
       const session = dictationSession;
       if (!session || !session.active) return;
+      session.lastRecognizingText = '';
       const expected = session.sequence[session.index];
       showDictationPanel(`${t('dictationPrompt')} ${expected.toUpperCase()}\n${t('dictationListening')} ${session.index + 1}/${session.sequence.length}`);
       window.speechSynthesis.cancel();
       speakLetter(expected, 0.82);
       session.awaiting = true;
-      session.waitTimer = setTimeout(() => completeDictationAttempt({ heard: '', score: 0, pass: false }), 4500);
+      session.waitTimer = setTimeout(_dictationTimeoutFallback, 6500);
     }
     function startDictationSession(){
       const clickedSet = new Set(basicClickedSequence);
@@ -1613,7 +1626,8 @@
         waitTimer: 0,
         stepTimer: 0,
         recognition: null,
-        azureRecognizer: null
+        azureRecognizer: null,
+        lastRecognizingText: ''
       };
       if (running && gameMode === 'basic') syncBasicLetterSpeech(true);
       if (SpeechRecognitionCtor) {
@@ -1638,14 +1652,20 @@
     function launchDictationNative(){
       const recognition = new SpeechRecognitionCtor();
       recognition.lang = voiceLangSel.value || 'en-US';
-      recognition.interimResults = false;
+      recognition.interimResults = true;
       recognition.continuous = true;
       recognition.maxAlternatives = 5;
       recognition.onresult = (event) => {
-        if (!dictationSession?.active || !dictationSession.awaiting) return;
+        if (!dictationSession?.active) return;
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const result = event.results[i];
-          if (!result.isFinal) continue;
+          if (!result.isFinal) {
+            const interim = result[0]?.transcript || '';
+            if (interim && dictationSession) dictationSession.lastRecognizingText = interim;
+            showHeardText(interim || '...');
+            continue;
+          }
+          if (!dictationSession.awaiting) continue;
           const alternatives = [];
           for (let j = 0; j < result.length; j++) {
             alternatives.push({ transcript: result[j].transcript, confidence: result[j].confidence });
@@ -1685,7 +1705,10 @@
         if (!recognizer) { stopDictationSession(t('dictationMicError')); playSequenceOnly(); return; }
         dictationSession.azureRecognizer = recognizer;
         recognizer.recognizing = (s, e) => {
-          if (dictationSession?.active) showHeardText(e.result.text || '...');
+          if (!dictationSession?.active) return;
+          const text = e.result.text || '';
+          if (text) dictationSession.lastRecognizingText = text;
+          showHeardText(text || '...');
         };
         recognizer.recognized = (s, e) => {
           _dictAzureRetryCount = 0;
