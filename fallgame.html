@@ -108,7 +108,7 @@
     #dictationPanel{
       position:absolute;right:var(--safe-right);top:calc(var(--safe-top) + 64px);z-index:25;display:none;
       width:min(92vw,340px);padding:12px;border-radius:14px;background:var(--panel);border:1px solid #2a3a75;
-      backdrop-filter:blur(10px);box-shadow:0 10px 30px rgba(0,0,0,.28)
+      backdrop-filter:blur(10px);box-shadow:0 10px 30px rgba(0,0,0,.28);pointer-events:none
     }
     #dictationPanel.show{display:block}
     #dictationTitle{font-size:14px;font-weight:900;margin-bottom:6px}
@@ -1615,6 +1615,8 @@
       }
       stopDictationSession();
       stopVoiceInput();
+      ensureAudio();
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
       showDictationPanel(`${t('dictationTitle')}\n${t('dictationListening')}...`);
       setDictationButtonUI(true);
       _dictationMicPermissionPending = true;
@@ -1629,7 +1631,6 @@
           return;
         }
         _dictationMicPermissionPending = false;
-        ensureAudio();
         launchDictationRecognition(seq);
       });
     }
@@ -1682,6 +1683,13 @@
             const interim = result[0]?.transcript || '';
             if (interim && dictationSession) dictationSession.lastRecognizingText = interim;
             showHeardText(interim || '...');
+            if (interim && dictationSession.awaiting) {
+              const letter = bestLetterFromAlternatives([{transcript: interim, confidence: 0.65}]);
+              if (letter === dictationSession.sequence[dictationSession.index]) {
+                handleDictationResult([{transcript: interim, confidence: 0.7}]);
+                return;
+              }
+            }
             continue;
           }
           if (!dictationSession.awaiting) continue;
@@ -1728,6 +1736,12 @@
           const text = e.result.text || '';
           if (text) dictationSession.lastRecognizingText = text;
           showHeardText(text || '...');
+          if (text && dictationSession.awaiting) {
+            const letter = bestLetterFromAlternatives([{transcript: text, confidence: 0.65}]);
+            if (letter === dictationSession.sequence[dictationSession.index]) {
+              handleDictationResult([{transcript: text, confidence: 0.7}]);
+            }
+          }
         };
         recognizer.recognized = (s, e) => {
           _dictAzureRetryCount = 0;
