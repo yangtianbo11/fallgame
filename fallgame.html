@@ -936,9 +936,21 @@
     let azureRecognizer = null;
     let _azureRetryCount = 0;
     const _AZURE_MAX_RETRIES = 5;
+    let _voiceDedup = { letter: '', time: 0 };
+    function _tryInterimMatch(text){
+      if (!text || !voiceInputActive) return;
+      const letter = transcriptToLetter(text);
+      if (!letter) return;
+      if (isBasicSystemEchoLetter(letter)) return;
+      const now = performance.now();
+      if (letter === _voiceDedup.letter && now - _voiceDedup.time < 1500) return;
+      _voiceDedup = { letter, time: now };
+      processLetterKey(letter);
+    }
     function startVoiceInput(){
       if (voiceInputActive) return;
       _azureRetryCount = 0;
+      _voiceDedup = { letter: '', time: 0 };
       const hasSR = !!SpeechRecognitionCtor;
       const hasAzure = !!getAzureConfig();
       if (!hasSR && !hasAzure) {
@@ -978,21 +990,26 @@
     function launchRecognitionNative(){
       const recognition = new SpeechRecognitionCtor();
       recognition.lang = voiceLangSel.value || 'en-US';
-      recognition.interimResults = false;
+      recognition.interimResults = true;
       recognition.continuous = true;
       recognition.maxAlternatives = 5;
       recognition.onresult = (event) => {
         if (!voiceInputActive) return;
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const result = event.results[i];
-          if (!result.isFinal) continue;
-          const alts = [];
-          for (let j = 0; j < result.length; j++) {
-            alts.push({ transcript: result[j].transcript, confidence: result[j].confidence });
+          if (result.isFinal) {
+            const alts = [];
+            for (let j = 0; j < result.length; j++) {
+              alts.push({ transcript: result[j].transcript, confidence: result[j].confidence });
+            }
+            showHeardText(alts[0]?.transcript || '');
+            const letter = bestLetterFromAlternatives(alts);
+            if (letter && !isBasicSystemEchoLetter(letter)) processLetterKey(letter);
+          } else {
+            const text = result[0]?.transcript || '';
+            showHeardText(text);
+            _tryInterimMatch(text);
           }
-          showHeardText(alts[0]?.transcript || '');
-          const letter = bestLetterFromAlternatives(alts);
-          if (letter && !isBasicSystemEchoLetter(letter)) processLetterKey(letter);
         }
       };
       let permissionDenied = false;
@@ -1058,7 +1075,9 @@
         azureRecognizer = recognizer;
         recognizer.recognizing = (s, e) => {
           if (!voiceInputActive) return;
-          showHeardText(e.result.text || '...');
+          const text = e.result.text || '';
+          showHeardText(text || '...');
+          _tryInterimMatch(text);
         };
         recognizer.recognized = (s, e) => {
           if (!voiceInputActive) return;
@@ -1221,11 +1240,11 @@
           src.start(now + d);
           return src;
         });
-        obj._speechSuppressUntil = performance.now() + (2.3 + durSec) * 1000 + marginMs;
+        obj._speechSuppressUntil = performance.now() + durSec * 1000 + 300;
       } else {
         const delays = [0, 1150, 2300];
         const decodeLagMs = buffer ? 0 : 2200;
-        obj._speechSuppressUntil = performance.now() + 2300 + durSec * 1000 + marginMs + decodeLagMs;
+        obj._speechSuppressUntil = performance.now() + durSec * 1000 + 300 + decodeLagMs;
         obj.speechTimers = delays.map(delay => setTimeout(() => {
           if (!running || !obj.alive || obj.clicked || obj.settled) return;
           speakLetter(obj.ch);
